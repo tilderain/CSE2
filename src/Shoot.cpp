@@ -165,84 +165,68 @@ void ShootBullet_PoleStar(int level)
 	}
 }
 
+
+// Note: 'empty' is usually a static variable at the top of Shoot.cpp in CSE2.
+extern int empty;
+
+#include "Flags.h"
+
 void ShootBullet_FireBall(int level)
 {
-	int bul_no;
+	static int wait;
 
-	switch (level)
-	{
-		case 1:
-			if (CountArmsBullet(3) > 1)
-				return;
-
-			bul_no = 7;
-			break;
-
-		case 2:
-			if (CountArmsBullet(3) > 2)
-				return;
-
-			bul_no = 8;
-			break;
-
-		case 3:
-			if (CountArmsBullet(3) > 3)
-				return;
-
-			bul_no = 9;
-			break;
-	}
+	if (--empty <= 0)
+		empty = 0;
 
 	if (gKeyTrg & gKeyShot)
 	{
-		if (!UseArmsEnergy(1))
+		// Calculate dynamic ammo cost
+		int ammo_cost = (2 * level) + 4;
+		if (GetNPCFlag(242)) ammo_cost = (2 * level) + 9;
+		if (GetNPCFlag(243)) ammo_cost += 10; // Max cost is 25
+
+		// Gate: Only fire if current ammo >= cost
+		if (gArmsData[gSelectedArms].num < ammo_cost)
 		{
-			ChangeToFirstArms();
+			//PlaySoundObject(37, SOUND_MODE_PLAY); // Click
+			if (empty == 0)
+			{
+				//SetCaret(gMC.x, gMC.y, CARET_EMPTY, DIR_LEFT);
+				empty = 50;
+			}
 		}
 		else
 		{
-			if (gMC.up)
+			UseArmsEnergy(ammo_cost);
+
+			int bul_x, bul_y, bul_dir, caret_x;
+
+			if (gMC.up || gMC.down)
 			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (4 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x - (4 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (4 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x + (4 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-				}
-			}
-			else if (gMC.down)
-			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (4 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x - (4 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (4 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x + (4 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-				}
+				bul_dir = gMC.up ? DIR_UP : DIR_DOWN;
+				bul_x = (gMC.direct == DIR_LEFT) ? gMC.x - 0x200 : gMC.x + 0x200;
+				bul_y = gMC.up ? gMC.y - 0x1000 : gMC.y + 0x1000;
+				caret_x = bul_x;
 			}
 			else
 			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (6 * 0x200), gMC.y + (2 * 0x200), 0);
-					SetCaret(gMC.x - (12 * 0x200), gMC.y + (2 * 0x200), 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (6 * 0x200), gMC.y + (2 * 0x200), 2);
-					SetCaret(gMC.x + (12 * 0x200), gMC.y + (2 * 0x200), 3, 0);
-				}
+				bul_dir = gMC.direct;
+				bul_y = gMC.y + 0x600;
+				int offset = (gMC.direct == DIR_LEFT) ? -0xC00 : 0xC00;
+				bul_x = gMC.x + offset;
+				caret_x = gMC.x + (offset * 2);
 			}
 
-			PlaySoundObject(34, SOUND_MODE_PLAY);
+			SetBullet(7, bul_x, bul_y, bul_dir);
+			SetCaret(caret_x, bul_y, CARET_SHOOT, DIR_LEFT);
+
+			PlaySoundObject((level == 3) ? 33 : 34, SOUND_MODE_PLAY);
 		}
+	}
+	else if (++wait >= 2) // Passive Recharge
+	{
+		wait = 0;
+		ChargeArmsEnergy(1);
 	}
 }
 

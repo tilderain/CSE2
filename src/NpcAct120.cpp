@@ -681,49 +681,36 @@ void ActNpc128(NPCHAR *npc)
 }
 
 // Fireball trail (Level 2 & 3)
+
 void ActNpc129(NPCHAR *npc)
 {
-	RECT rect[18] = {
-		{128, 48, 144, 64},
-		{144, 48, 160, 64},
-		{160, 48, 176, 64},
-
-		{128, 64, 144, 80},
-		{144, 64, 160, 80},
-		{160, 64, 176, 80},
-
-		{128, 80, 144, 96},
-		{144, 80, 160, 96},
-		{160, 80, 176, 96},
-
-		{176, 48, 192, 64},
-		{192, 48, 208, 64},
-		{208, 48, 224, 64},
-
-		{176, 64, 192, 80},
-		{192, 64, 208, 80},
-		{208, 64, 224, 80},
-
-		{176, 80, 192, 96},
-		{192, 80, 208, 96},
-		{208, 80, 224, 96},
+	// RECT table containing 18 frames (6 directions/levels * 3 animation frames)
+	static const RECT rect[] = {
+		{128, 48, 144, 64}, {144, 48, 160, 64}, {160, 48, 176, 64}, // Direct 0
+		{128, 64, 144, 80}, {144, 64, 160, 80}, {160, 64, 176, 80}, // Direct 1
+		{128, 80, 144, 96}, {144, 80, 160, 96}, {160, 80, 176, 96}, // Direct 2
+		{176, 48, 192, 64}, {192, 48, 208, 64}, {208, 48, 224, 64}, // Direct 3
+		{176, 64, 192, 80}, {192, 64, 208, 80}, {208, 64, 224, 80}, // Direct 4
+		{176, 80, 192, 96}, {192, 80, 208, 96}, {208, 80, 224, 96}, // Direct 5
 	};
 
+	// Advance animation timer
 	if (++npc->ani_wait > 1)
 	{
 		npc->ani_wait = 0;
-
+		
+		// Advance frame; if it exceeds the 3rd frame, destroy the trail
 		if (++npc->ani_no > 2)
 		{
 			npc->cond = 0;
-		#ifdef FIX_BUGS
-			return;	// The code below will use 'ani_no' to access 'rect', even though it's now too high
-		#endif
+			return;
 		}
 	}
 
+	// Move vertically (typically trails drift slightly or follow the projectile's vertical velocity)
 	npc->y += npc->ym;
 
+	// Set the frame based on the direction (assigned by the bullet) and current animation frame
 	npc->rect = rect[(npc->direct * 3) + npc->ani_no];
 }
 

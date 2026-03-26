@@ -15,6 +15,299 @@
 
 BULLET gBul[BULLET_MAX];
 
+#include "Bullet.h"
+#include "NpChar.h"
+#include "MyChar.h"
+#include "Sound.h"
+#include "Caret.h"
+#include "Map.h"
+#include "Triangle.h"
+#include "Flags.h"
+#include "ArmsItem.h"
+#include "KeyControl.h"
+#include "Random.h"
+
+// Mod-specific Global Variables used for the Custom Bubbler logic
+unsigned char gCustomWeaponState = 0;
+unsigned char gCustomWeaponDir = 0;
+
+
+void ActBullet_FireBall_Meteor(BULLET *bul)
+{
+	bul->y += 0x300;
+	bul->direct = DIR_LEFT;
+
+	if (++bul->ani_wait > 2)
+	{
+		bul->ani_wait = 0;
+		++bul->ani_no;
+	}
+
+	if (++bul->count1 > bul->life_count)
+	{
+		bul->cond = 0;
+	}
+	else
+	{
+		if (bul->ani_no > 4)
+			bul->ani_no = 0;
+
+		// Reconstructed from the assembly's local array
+		RECT rect_meteor[5] = {
+			{192, 16, 200, 32},
+			{200, 16, 208, 32},
+			{208, 16, 216, 32},
+			{216, 16, 224, 32},
+			{224, 16, 232, 32},
+		};
+
+		bul->rect = rect_meteor[bul->ani_no];
+	}
+}
+
+//-----------------------------------------------------
+// Fireball Level 3 Explosion (Bullet 9)
+//-----------------------------------------------------
+
+void ActBullet_FireBall_Explosion(BULLET *bul)
+{
+	// FUN_00494360(3) -> Dynamically get Fireball weapon level
+	int level = 0;
+	for (int i = 0; i < ARMS_MAX; ++i)
+	{
+		if (gArmsData[i].code == 3)
+		{
+			level = gArmsData[i].level;
+			break;
+		}
+	}
+
+	// 004943cd: MOV [ECX + 0x58], EAX -> bul->damage = level
+	bul->damage = level;
+
+	if (bul->act_no == 0)
+	{
+		bul->act_no = 1;
+		bul->act_wait = 12;
+		PlaySoundObject(71, SOUND_MODE_PLAY);  // 0x47 SND_EXPLOSION
+		PlaySoundObject(114, SOUND_MODE_PLAY); // 0x72 SND_IRONH_DAMAGE
+	}
+	else if (bul->act_no == 1)
+	{
+		if (bul->act_wait % 3 == 0)
+		{
+			int spread = (level * 8) + 5;
+			
+			// The assembly calculates Y randomness first, then X randomness
+			int rand_y = Random(-spread, spread) * 0x200;
+			int rand_x = Random(-spread, spread) * 0x200;
+			
+			// SetDestroyNpCharUp(x, y, w, num)
+			// Assembly passes bul->enemyXL (0x60) for width and bul->damage (0x58) for count
+			SetDestroyNpCharUp(bul->x + rand_x, bul->y + rand_y, bul->enemyXL, bul->damage);
+		}
+
+		if (bul->act_wait % 2 == 0)
+		{
+			bul->damage = 0; // Temporarily disable damage to prevent multi-hit melting
+		}
+
+		bul->act_wait--;
+
+		if (bul->act_wait < 0)
+		{
+			bul->cond = 0;
+		}
+	}
+}
+
+
+//-----------------------------------------------------
+// Machine Gun (Bullet 10, 11, 12)
+//-----------------------------------------------------
+void ActBullet_MachineGun(BULLET *bul, int level)
+{
+	if (++bul->count1 > bul->life_count)
+	{
+		bul->cond = 0;
+		SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
+		return;
+	}
+
+	if (bul->act_no == 0)
+	{
+		int move = 0x1000;
+		bul->act_no = 1;
+
+		// Mod modification: Spread adjustment based on flags
+		int spread = 0x90;
+		if (GetNPCFlag(563))
+			spread = 0x10;
+		else if (GetNPCFlag(564))
+			spread = 0x50;
+
+		switch (bul->direct)
+		{
+			case DIR_LEFT:
+				bul->xm = -move;
+				bul->ym = Random(-spread, spread);
+				break;
+			case DIR_UP:
+				bul->ym = -move;
+				bul->xm = Random(-spread, spread);
+				break;
+			case DIR_RIGHT:
+				bul->xm = move;
+				bul->ym = Random(-spread, spread);
+				break;
+			case DIR_DOWN:
+				bul->ym = move;
+				bul->xm = Random(-spread, spread);
+				break;
+		}
+	}
+	else
+	{
+		bul->x += bul->xm;
+		bul->y += bul->ym;
+
+		RECT rect1[4] = {
+			{64, 0, 80, 16}, {80, 0, 96, 16}, {96, 0, 112, 16}, {112, 0, 128, 16},
+		};
+
+		RECT rect2[4] = {
+			{64, 16, 80, 32}, {80, 16, 96, 32}, {96, 16, 112, 32}, {112, 16, 128, 32},
+		};
+
+		RECT rect3[4] = {
+			{64, 32, 80, 48}, {80, 32, 96, 48}, {96, 32, 112, 48}, {112, 32, 128, 48},
+		};
+
+		switch (level)
+		{
+			case 1:
+				bul->rect = rect1[bul->direct];
+				break;
+			case 2:
+				bul->rect = rect2[bul->direct];
+				SetNpChar(127, bul->x, bul->y, 0, 0, (bul->direct == DIR_UP || bul->direct == DIR_DOWN) ? 1 : 0, NULL, 0x100);
+				break;
+			case 3:
+				bul->rect = rect3[bul->direct];
+				SetNpChar(128, bul->x, bul->y, 0, 0, bul->direct, NULL, 0x100);
+				break;
+		}
+	}
+}
+
+//-----------------------------------------------------
+// Custom Bubbler logic (Bullet 19, 20, 21)
+//-----------------------------------------------------
+void ActBullet_CustomBubbler(BULLET *bul)
+{
+	int wpn_lvl = 0;
+	for (int i = 0; i < ARMS_MAX; ++i)
+	{
+		if (gArmsData[i].code == 7) // 7 = Bubbler
+		{
+			wpn_lvl = gArmsData[i].level;
+			break;
+		}
+	}
+
+	bul->damage = (wpn_lvl + 3) / 2;
+	bul->life_count = wpn_lvl * 2 + 10;
+
+	if (gCustomWeaponState == 1)
+	{
+		if (bul->act_no == 1)
+		{
+			if ((bul->flag & 0xF) == 0)
+			{
+				bul->count1++;
+				if (bul->count1 < bul->life_count)
+				{
+					bul->act_wait--;
+					if (bul->act_wait < 1)
+					{
+						bul->act_wait = 5;
+						PlaySoundObject(100, SOUND_MODE_PLAY); // 100 SND_BUBBLER_LAUNCH
+					}
+					bul->x += bul->xm;
+					bul->y += bul->ym;
+					
+					RECT rc = {0, 48, 16, 64};
+					rc.left += gCustomWeaponDir * 16;
+					rc.right += gCustomWeaponDir * 16;
+					bul->rect = rc;
+					return;
+				}
+			}
+			else
+			{
+				PlaySoundObject(31, SOUND_MODE_PLAY); // 0x1F SND_PROJECTILE_HIT
+				SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
+			}
+			
+			gCustomWeaponState = 3;
+		}
+		else
+		{
+			int xm = 0, ym = 0;
+			
+			switch (gCustomWeaponDir)
+			{
+				case 0: xm = -0xF00; break;
+				case 1: ym = -0xF00; break;
+				case 2: xm =  0xF00; break;
+				case 3: ym =  0xF00; break;
+				case 4: xm = -0xD00; ym = -0xD00; break;
+				case 5: xm =  0xD00; ym = -0xD00; break;
+				case 6: xm =  0xD00; ym =  0xD00; break;
+				case 7: xm = -0xD00; ym =  0xD00; break;
+			}
+			
+			bul->xm = xm;
+			bul->ym = ym;
+			bul->act_no = 1;
+		}
+		return;
+	}
+	
+	if (gCustomWeaponState != 2)
+	{
+		if (gCustomWeaponState == 3)
+			gCustomWeaponState = 0;
+		else
+			bul->cond = 0;
+			
+		return;
+	}
+	
+	bul->life = 100;
+	
+	if (gSelectedArms == 5)
+	{
+		if (!(gKey & gKeyShot)) { /* Do nothing */ }
+		else if (gKey & gKeyJump)
+		{
+			// Acts like a jetpack!
+			gMC.xm += gMC.xm / 5;
+			gMC.ym += gMC.ym / 7;
+		}
+	}
+	else if (!(gKey & gKeyJump)) { /* Do nothing */ }
+	else
+	{
+		gCustomWeaponState = 3;
+	}
+	
+	RECT rcEmpty = {0, 0, 0, 0};
+	bul->rect = rcEmpty;
+}
+
+
+
 void InitBullet(void)
 {
 	// Identical to ClearBullet
@@ -510,250 +803,201 @@ void ActBullet_PoleStar(BULLET *bul, int level)
 			break;
 	}
 }
+#include "Map.h"
+#include "Flags.h"
+#include "ArmsItem.h"
+
 
 void ActBullet_FireBall(BULLET *bul, int level)
 {
 	BOOL bBreak;
 
-	if (++bul->count1 > bul->life_count)
+	// The mod dynamically fetches the Fireball's level (Weapon ID 3) directly 
+	// from the inventory, ignoring the 'level' parameter.
+	int real_level = 0;
+	for (int i = 0; i < ARMS_MAX; ++i)
 	{
-		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 3, 0);
+		if (gArmsData[i].code == 3)
+		{
+			real_level = gArmsData[i].level;
+			break;
+		}
+	}
+
+	bul->damage = real_level + 1;
+	bul->count1 += (4 - real_level);
+
+	if (bul->count1 > bul->life_count || bul->life <= 1 || !(bul->cond & 0x80))
+	{
+		if (bul->act_no == 2)
+		{
+			PlaySoundObject(70, SOUND_MODE_PLAY); // 0x46 (SND_LITTLE_CRASH)
+			
+			// FIXED: Uses Caret 12 (Flash/Star) instead of 2 (Dissipate Puff)
+			SetCaret(bul->x, bul->y, 12, 1); 
+			bul->cond = 0;
+			return;
+		}
+
+		bul->act_no = 2; // Transition to death animation on the next frame
+		
+		// Mod Flag 243: Spawn a level 3 Fireball explosion (Bullet 9) on death
+		if (GetNPCFlag(243))
+			SetBullet(9, bul->x, bul->y, DIR_RIGHT);
+
 		return;
+	}
+
+	// Check environment attribute at current position
+	unsigned char atrb = GetAttribute(bul->x / 0x10 / 0x200, bul->y / 0x10 / 0x200);
+	
+	if (atrb == 0x03 || (atrb >= 0x60 && atrb <= 0x62) || (atrb >= 0x70 && atrb <= 0x77) || (atrb >= 0xA0 && atrb <= 0xA3))
+	{
+		bul->count1 += 6;
+		bul->act_no = 2; // Hit a wall, trigger dissipation
 	}
 
 	bBreak = FALSE;
-	if (bul->flag & 2 && bul->flag & 8)
+	if (bul->flag & COLL_CEILING && bul->flag & COLL_GROUND)
 		bBreak = TRUE;
-	if (bul->flag & 1 && bul->flag & 4)
+	if (bul->flag & COLL_LEFT_WALL && bul->flag & COLL_RIGHT_WALL)
 		bBreak = TRUE;
 
-	if (bul->direct == 0 && bul->flag & 1)
-		bul->direct = 2;
-	if (bul->direct == 2 && bul->flag & 4)
-		bul->direct = 0;
+	// Bounce off walls
+	if (bul->direct == DIR_LEFT && bul->flag & COLL_LEFT_WALL)
+		bul->direct = DIR_RIGHT;
+	if (bul->direct == DIR_RIGHT && bul->flag & COLL_RIGHT_WALL)
+		bul->direct = DIR_LEFT;
 
+	// Anti-stuck behavior
 	if (bBreak)
 	{
-		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 2, 0);
-		PlaySoundObject(28, SOUND_MODE_PLAY);
-		return;
+		bul->y += 0x1000;
+		bul->ym = -bul->ym;
 	}
 
+	// Initialization
 	if (bul->act_no == 0)
 	{
 		bul->act_no = 1;
 
 		switch (bul->direct)
 		{
-			case 0:
-				bul->xm = -0x400;
+			case DIR_LEFT:
+				bul->xm = -0x500;
 				break;
 
-			case 1:
+			case DIR_UP:
 				bul->xm = gMC.xm;
-
 				if (gMC.xm < 0)
-					bul->direct = 0;
+					bul->direct = DIR_LEFT;
 				else
-					bul->direct = 2;
+					bul->direct = DIR_RIGHT;
 
-				if (gMC.direct == 0)
+				if (gMC.direct == DIR_LEFT)
 					bul->xm -= 0x80;
 				else
 					bul->xm += 0x80;
 
-				bul->ym = -0x5FF;
+				bul->ym = -0x900;
 				break;
 
-			case 2:
-				bul->xm = 0x400;
+			case DIR_RIGHT:
+				bul->xm = 0x500;
 				break;
 
-			case 3:
+			case DIR_DOWN:
 				bul->xm = gMC.xm;
-
 				if (gMC.xm < 0)
-					bul->direct = 0;
+					bul->direct = DIR_LEFT;
 				else
-					bul->direct = 2;
+					bul->direct = DIR_RIGHT;
 
-				bul->ym = 0x5FF;
-
+				bul->ym = 0x600;
 				break;
 		}
 	}
 	else
 	{
-		if (bul->flag & 8)
-			bul->ym = -0x400;
-		else if (bul->flag & 1)
-			bul->xm = 0x400;
-		else if (bul->flag & 4)
-			bul->xm = -0x400;
+		// Physics
+		if (bul->flag & COLL_GROUND)
+			bul->ym = -0x4B0;
+		else if (bul->flag & COLL_LEFT_WALL)
+			bul->xm = 0x600;
+		else if (bul->flag & COLL_RIGHT_WALL)
+			bul->xm = -0x600;
+		else if (bul->flag & COLL_CEILING)
+			bul->ym = 0x4B0;
 
-		bul->ym += 85;
-		if (bul->ym > 0x3FF)
-			bul->ym = 0x3FF;
+		bul->ym += 0x55;
+		if (bul->ym > 0x4B0)
+			bul->ym = 0x4B0;
 
 		bul->x += bul->xm;
 		bul->y += bul->ym;
 
-		if (bul->flag & 0xD)
-			PlaySoundObject(34, SOUND_MODE_PLAY);
+		if (bul->flag & 0x0D) // COLL_GROUND | COLL_LEFT_WALL | COLL_RIGHT_WALL
+			PlaySoundObject(34, SOUND_MODE_PLAY); // SND_FIRE_BALL_BOUNCE (0x22)
 	}
 
-	RECT rect_left1[4] = {
-		{128, 0, 144, 16},
-		{144, 0, 160, 16},
-		{160, 0, 176, 16},
+	// Mod Flag 242: Meteor Storm (Spawns Bullet 8)
+	if (GetNPCFlag(242))
+	{
+		++bul->count2;
+		int limit;
+
+		if (real_level == 3)
+			limit = 7;
+		else if (real_level == 2)
+			limit = 9;
+		else
+			limit = 11;
+
+		if (bul->count2 >= limit)
+		{
+			bul->count2 = 0;
+			
+			// Only the X-axis is randomized in the assembly for the meteor spawn.
+			int rand_x = Random(-0x500, 0x500);
+			SetBullet(8, bul->x + rand_x, bul->y - 0xA00, DIR_LEFT);
+		}
+	}
+
+	// FIXED: The EXACT array values dumped directly from the raw assembly registers!
+	// These frame rectangles point to custom regions of the modder's Bullet.bmp file.
+	RECT rect_left[3] = {
+		{144, 16, 160, 32},
+		{128, 16, 144, 32},
 		{176, 0, 192, 16},
 	};
 
-	RECT rect_right1[4] = {
-		{128, 16, 144, 32},
-		{144, 16, 160, 32},
-		{160, 16, 176, 32},
-		{176, 16, 192, 32},
+	RECT rect_right[3] = {
+		{160, 0, 176, 16},
+		{144, 0, 160, 16},
+		{128, 0, 144, 16},
 	};
 
-	RECT rect_left2[3] = {
-		{192, 16, 208, 32},
-		{208, 16, 224, 32},
-		{224, 16, 240, 32},
-	};
+	if (++bul->ani_no > 2)
+		bul->ani_no = 0;
 
-	RECT rect_right2[3] = {
-		{224, 16, 240, 32},
-		{208, 16, 224, 32},
-		{192, 16, 208, 32},
-	};
-
-	++bul->ani_no;
-
-	if (level == 1)
-	{
-		if (bul->ani_no > 3)
-			bul->ani_no = 0;
-
-		if (bul->direct == 0)
-			bul->rect = rect_left1[bul->ani_no];
-		else
-			bul->rect = rect_right1[bul->ani_no];
-	}
+	if (bul->direct == DIR_LEFT)
+		bul->rect = rect_left[bul->ani_no];
 	else
-	{
-		if (bul->ani_no > 2)
-			bul->ani_no = 0;
+		bul->rect = rect_right[bul->ani_no];
 
-		if (bul->direct == 0)
-			bul->rect = rect_left2[bul->ani_no];
-		else
-			bul->rect = rect_right2[bul->ani_no];
-
-		if (level == 2)
-			SetNpChar(129, bul->x, bul->y, 0, -0x200, bul->ani_no, NULL, 0x100);
-		else
-			SetNpChar(129, bul->x, bul->y, 0, -0x200, bul->ani_no + 3, NULL, 0x100);
-	}
-}
-
-void ActBullet_MachineGun(BULLET *bul, int level)
-{
-	int move;
-
-	RECT rect1[4] = {
-		{64, 0, 80, 16},
-		{80, 0, 96, 16},
-		{96, 0, 112, 16},
-		{112, 0, 128, 16},
-	};
-
-	RECT rect2[4] = {
-		{64, 16, 80, 32},
-		{80, 16, 96, 32},
-		{96, 16, 112, 32},
-		{112, 16, 128, 32},
-	};
-
-	RECT rect3[4] = {
-		{64, 32, 80, 48},
-		{80, 32, 96, 48},
-		{96, 32, 112, 48},
-		{112, 32, 128, 48},
-	};
-
-	if (++bul->count1 > bul->life_count)
-	{
-		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 3, 0);
-		return;
-	}
-
-	if (bul->act_no == 0)
-	{
-		switch (level)
-		{
-			case 1:
-				move = 0x1000;
-				break;
-			case 2:
-				move = 0x1000;
-				break;
-			case 3:
-				move = 0x1000;
-				break;
-		}
-
-		bul->act_no = 1;
-
-		switch (bul->direct)
-		{
-			case 0:
-				bul->xm = -move;
-				bul->ym = Random(-0xAA, 0xAA);
-				break;
-			case 1:
-				bul->ym = -move;
-				bul->xm = Random(-0xAA, 0xAA);
-				break;
-			case 2:
-				bul->xm = move;
-				bul->ym = Random(-0xAA, 0xAA);
-				break;
-			case 3:
-				bul->ym = move;
-				bul->xm = Random(-0xAA, 0xAA);
-				break;
-		}
-	}
+	// Trail spawner (NPC 129)
+	if (bul->xm <= 0)
+		SetNpChar(129, bul->x, bul->y, 0, -0x200, bul->ani_no, NULL, 0x100);
 	else
+		SetNpChar(129, bul->x, bul->y, 0, -0x20, bul->ani_no + 3, NULL, 0x100);
+
+	// Mod Flag 243: Sprite bounds shifting
+	if (GetNPCFlag(243))
 	{
-		bul->x += bul->xm;
-		bul->y += bul->ym;
-
-		switch (level)
-		{
-			case 1:
-				bul->rect = rect1[bul->direct];
-				break;
-
-			case 2:
-				bul->rect = rect2[bul->direct];
-
-				if (bul->direct == 1 || bul->direct == 3)
-					SetNpChar(127, bul->x, bul->y, 0, 0, 1, NULL, 0x100);
-				else
-					SetNpChar(127, bul->x, bul->y, 0, 0, 0, NULL, 0x100);
-
-				break;
-
-			case 3:
-				bul->rect = rect3[bul->direct];
-				SetNpChar(128, bul->x, bul->y, 0, 0, bul->direct, NULL, 0x100);
-				break;
-		}
+		bul->rect.left -= 8;
+		bul->rect.right -= 8;
+		bul->rect.top += 0x60;
+		bul->rect.bottom += 0x60;
 	}
 }
 
@@ -2272,6 +2516,9 @@ void ActBullet_Star(BULLET *bul)
 		bul->cond = 0;
 }
 
+//-----------------------------------------------------
+// Master ActBullet function
+//-----------------------------------------------------
 void ActBullet(void)
 {
 	int i;
@@ -2286,185 +2533,71 @@ void ActBullet(void)
 				continue;
 			}
 
+			// Map directly to `code_bullet` values defined in gBulTbl
 			switch (gBul[i].code_bullet)
 			{
-				// Snake
-				case 1:
-					ActBullet_Frontia1(&gBul[i]);
-					break;
-				case 2:
-					ActBullet_Frontia2(&gBul[i], 2);
-					break;
-				case 3:
-					ActBullet_Frontia2(&gBul[i], 3);
-					break;
+				case 1: ActBullet_Frontia1(&gBul[i]); break;
+				case 2: ActBullet_Frontia2(&gBul[i], 2); break;
+				case 3: ActBullet_Frontia2(&gBul[i], 3); break;
 
-				// Polar Star
-				case 4:
-					ActBullet_PoleStar(&gBul[i], 1);
-					break;
-				case 5:
-					ActBullet_PoleStar(&gBul[i], 2);
-					break;
-				case 6:
-					ActBullet_PoleStar(&gBul[i], 3);
-					break;
+				case 4: ActBullet_PoleStar(&gBul[i], 1); break;
+				case 5: ActBullet_PoleStar(&gBul[i], 2); break;
 
-				// Fireball
-				case 7:
-					ActBullet_FireBall(&gBul[i], 1);
-					break;
-				case 8:
-					ActBullet_FireBall(&gBul[i], 2);
-					break;
-				case 9:
-					ActBullet_FireBall(&gBul[i], 3);
-					break;
+				// Custom Modded Fireball
+				case 7: ActBullet_FireBall(&gBul[i], 0); break;
+				case 8: ActBullet_FireBall_Meteor(&gBul[i]); break;
+				case 9: ActBullet_FireBall_Explosion(&gBul[i]); break;
 
-				// Machine Gun
-				case 10:
-					ActBullet_MachineGun(&gBul[i], 1);
-					break;
-				case 11:
-					ActBullet_MachineGun(&gBul[i], 2);
-					break;
-				case 12:
-					ActBullet_MachineGun(&gBul[i], 3);
-					break;
+				// Custom Modded Machine Gun
+				case 10: ActBullet_MachineGun(&gBul[i], 1); break;
+				case 11: ActBullet_MachineGun(&gBul[i], 2); break;
+				case 12: ActBullet_MachineGun(&gBul[i], 3); break;
 
-				// Missile Launcher
-				case 13:
-					ActBullet_Missile(&gBul[i], 1);
-					break;
-				case 14:
-					ActBullet_Missile(&gBul[i], 2);
-					break;
-				case 15:
-					ActBullet_Missile(&gBul[i], 3);
-					break;
+				case 13: ActBullet_Missile(&gBul[i], 1); break;
+				case 14: ActBullet_Missile(&gBul[i], 2); break;
+				case 15: ActBullet_Missile(&gBul[i], 3); break;
 
-				// Missile Launcher explosion
-				case 16:
-					ActBullet_Bom(&gBul[i], 1);
-					break;
-				case 17:
-					ActBullet_Bom(&gBul[i], 2);
-					break;
-				case 18:
-					ActBullet_Bom(&gBul[i], 3);
-					break;
+				case 16: ActBullet_Bom(&gBul[i], 1); break;
+				case 17: ActBullet_Bom(&gBul[i], 2); break;
+				case 18: ActBullet_Bom(&gBul[i], 3); break;
 
-				// Bubbler
-				case 19:
-					ActBullet_Bubblin1(&gBul[i]);
-					break;
-				case 20:
-					ActBullet_Bubblin2(&gBul[i]);
-					break;
-				case 21:
-					ActBullet_Bubblin3(&gBul[i]);
-					break;
+				// Custom Modded Bubbler
+				case 19: ActBullet_CustomBubbler(&gBul[i]); break;
+				case 20: ActBullet_CustomBubbler(&gBul[i]); break;
+				case 21: ActBullet_CustomBubbler(&gBul[i]); break;
 
-				// Bubbler level 3 spines
-				case 22:
-					ActBullet_Spine(&gBul[i]);
-					break;
+				case 22: ActBullet_Spine(&gBul[i]); break;
 
-				// Blade slashes
-				case 23:
-					ActBullet_Edge(&gBul[i]);
-					break;
+				case 23: ActBullet_Edge(&gBul[i]); break;
 
-				// Falling spike that deals 127 damage
-				case 24:
-					ActBullet_Drop(&gBul[i]);
-					break;
+				// The mod replaces the Drop Spike (24) with Sword Level 1 logic
+				case 24: ActBullet_Sword1(&gBul[i]); break; 
+				case 25: ActBullet_Sword1(&gBul[i]); break;
+				case 26: ActBullet_Sword2(&gBul[i]); break;
 
-				// Blade
-				case 25:
-					ActBullet_Sword1(&gBul[i]);
-					break;
-				case 26:
-					ActBullet_Sword2(&gBul[i]);
-					break;
-				case 27:
-					ActBullet_Sword3(&gBul[i]);
-					break;
+				case 31: ActBullet_SuperBom(&gBul[i], 1); break;
+				case 32: ActBullet_SuperBom(&gBul[i], 2); break;
+				case 33: ActBullet_SuperBom(&gBul[i], 3); break;
 
-				// Super Missile Launcher
-				case 28:
-					ActBullet_SuperMissile(&gBul[i], 1);
-					break;
-				case 29:
-					ActBullet_SuperMissile(&gBul[i], 2);
-					break;
-				case 30:
-					ActBullet_SuperMissile(&gBul[i], 3);
-					break;
+				case 34: ActBullet_Nemesis(&gBul[i], 1); break;
+				case 35: ActBullet_Nemesis(&gBul[i], 2); break;
+				case 36: ActBullet_Nemesis(&gBul[i], 3); break;
 
-				// Super Missile Launcher explosion
-				case 31:
-					ActBullet_SuperBom(&gBul[i], 1);
-					break;
-				case 32:
-					ActBullet_SuperBom(&gBul[i], 2);
-					break;
-				case 33:
-					ActBullet_SuperBom(&gBul[i], 3);
-					break;
+				case 37: ActBullet_Spur(&gBul[i], 1); break;
+				case 38: ActBullet_Spur(&gBul[i], 2); break;
+				case 39: ActBullet_Spur(&gBul[i], 3); break;
 
-				// Nemesis
-				case 34:	// Identical to case 43
-					ActBullet_Nemesis(&gBul[i], 1);
-					break;
-				case 35:
-					ActBullet_Nemesis(&gBul[i], 2);
-					break;
-				case 36:
-					ActBullet_Nemesis(&gBul[i], 3);
-					break;
+				case 40: ActBullet_SpurTail(&gBul[i], 1); break;
+				case 41: ActBullet_SpurTail(&gBul[i], 2); break;
+				case 42: ActBullet_SpurTail(&gBul[i], 3); break;
 
-				// Spur
-				case 37:
-					ActBullet_Spur(&gBul[i], 1);
-					break;
-				case 38:
-					ActBullet_Spur(&gBul[i], 2);
-					break;
-				case 39:
-					ActBullet_Spur(&gBul[i], 3);
-					break;
-
-				// Spur trail
-				case 40:
-					ActBullet_SpurTail(&gBul[i], 1);
-					break;
-				case 41:
-					ActBullet_SpurTail(&gBul[i], 2);
-					break;
-				case 42:
-					ActBullet_SpurTail(&gBul[i], 3);
-					break;
-
-				// Curly's Nemesis
-				case 43:	// Identical to case 34
-					ActBullet_Nemesis(&gBul[i], 1);
-					break;
-
-				// Screen-nuke that kills all enemies
-				case 44:
-					ActBullet_EnemyClear(&gBul[i]);
-					break;
-
-				// Whimsical Star
-				case 45:
-					ActBullet_Star(&gBul[i]);
-					break;
+				case 43: ActBullet_Nemesis(&gBul[i], 1); break;
+				case 44: ActBullet_EnemyClear(&gBul[i]); break;
+				case 45: ActBullet_Star(&gBul[i]); break;
 			}
 		}
 	}
 }
-
 BOOL IsActiveSomeBullet(void)
 {
 	int i;
