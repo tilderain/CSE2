@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+		"cmath": "cpp",
+		"hash_map": "cpp",
+		"hash_set": "cpp",
+		"chrono": "cpp",
+		"algorithm": "cpp",
+		"array": "cpp",
+		"string_view": "cpp",
+		"limits": "cpp",
+		"deque": "cpp",
+		"list": "cpp",
+		"vector": "cpp",
+		"*.tcc": "cpp",
+		"fstream": "cpp"
+	}
+}
