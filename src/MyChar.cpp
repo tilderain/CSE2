@@ -1,3 +1,10 @@
+// THIS IS DECOMPILED PROPRIETARY CODE - USE AT YOUR OWN RISK.
+//
+// The original code belongs to Daisuke "Pixel" Amaya.
+//
+// Modifications and custom code are under the MIT licence.
+// See LICENCE.txt for details.
+
 #include "MyChar.h"
 
 #include <stddef.h>
@@ -7,6 +14,7 @@
 
 #include "ArmsItem.h"
 #include "Caret.h"
+#include "CommonDefines.h"
 #include "Draw.h"
 #include "Flags.h"
 #include "Game.h"
@@ -279,6 +287,34 @@ void ActMyChar_Normal(BOOL bKey)
 	int a, x;
 
 	MYCHAR_PHYSICS *physics;
+
+		//Debug fly
+	if (gDebug.bNoclip)
+	{
+		if (gKey & gKeyLeft)
+		{
+			gMC.x -= 0x1000;
+			gMC.direct = 0;
+		}
+		if (gKey & gKeyRight)
+		{
+			gMC.x += 0x1000;
+			gMC.direct = 2;
+		}
+		if (gKey & gKeyUp)
+		{
+			gMC.y -= 0x1000;
+		}
+		if (gKey & gKeyDown)
+		{
+			gMC.y += 0x1000;
+		}
+
+		gMC.tgt_x = gMC.x;
+		gMC.tgt_y = gMC.y;
+
+		return;
+	}
 
 	if (gMC.cond & 2)
 		return;

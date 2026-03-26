@@ -61,6 +61,7 @@ void Surface2Surface(int x, int y, const RECT *rect, int to, int from);
 unsigned long GetCortBoxColor(unsigned long col);
 void CortBox(const RECT *rect, unsigned long col);
 void CortBox2(const RECT *rect, unsigned long col, SurfaceID surf_no);
+void CortBoxUnscaled(const RECT *rect, unsigned long col);
 int RestoreSurfaces(void);
 int SubpixelToScreenCoord(int coord);
 int PixelToScreenCoord(int coord);

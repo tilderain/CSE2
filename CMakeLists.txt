@@ -73,6 +73,8 @@ add_executable(CSE2 WIN32
 	"src/CommonDefines.h"
 	"src/Config.cpp"
 	"src/Config.h"
+	"src/Debug.cpp"
+	"src/Debug.h"
 	"src/Draw.cpp"
 	"src/Draw.h"
 	"src/Ending.cpp"

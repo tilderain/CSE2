@@ -1,3 +1,10 @@
+// THIS IS DECOMPILED PROPRIETARY CODE - USE AT YOUR OWN RISK.
+//
+// The original code belongs to Daisuke "Pixel" Amaya.
+//
+// Modifications and custom code are under the MIT licence.
+// See LICENCE.txt for details.
+
 #include "Frame.h"
 
 #include "Boss.h"
@@ -13,6 +20,9 @@ void MoveFrame3(void)
 {
 	short map_w, map_l;
 	GetMapData(0, &map_w, &map_l);
+
+	int wait_memo = gFrame.wait;
+	if (gDebug.bNoclip) gFrame.wait = 1;
 
 #if WINDOW_WIDTH != 320 || WINDOW_HEIGHT != 240
 	if (g_GameFlags & 8)
@@ -96,7 +106,7 @@ void MoveFrame3(void)
 		gFrame.y += (Random(-1, 1) * 0x200);
 		--gFrame.quake;
 	}
-
+	gFrame.wait = wait_memo;
 	// This code exists in the Linux port (v1.0.0.4), but not the Windows version (v1.0.0.6) or the Mac port
 /*	if (gFrame.x < 0)
 		gFrame.x = 0;

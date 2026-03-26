@@ -1,3 +1,10 @@
+// THIS IS DECOMPILED PROPRIETARY CODE - USE AT YOUR OWN RISK.
+//
+// The original code belongs to Daisuke "Pixel" Amaya.
+//
+// Modifications and custom code are under the MIT licence.
+// See LICENCE.txt for details.
+
 #include "Game.h"
 
 #include <stddef.h>
@@ -44,6 +51,8 @@
 #include "Star.h"
 #include "TextScr.h"
 #include "ValueView.h"
+
+#include "Debug.h"
 
 int g_GameFlags;
 int gCounter;
@@ -817,6 +826,8 @@ BOOL Game(void)
 	InitSkipFlags();
 	InitMapData2();
 	InitCreditScript();
+
+	InitConsole();
 
 	mode = 1;
 	while (mode)

@@ -1,3 +1,10 @@
+// THIS IS DECOMPILED PROPRIETARY CODE - USE AT YOUR OWN RISK.
+//
+// The original code belongs to Daisuke "Pixel" Amaya.
+//
+// Modifications and custom code are under the MIT licence.
+// See LICENCE.txt for details.
+
 #include "Main.h"
 
 #include <stddef.h>
@@ -21,15 +28,24 @@
 #include "KeyControl.h"
 #include "MyChar.h"
 #include "Organya.h"
+#include "Profile.h"
 #include "Resource.h"
 #include "Stage.h"
 #include "Sound.h"
 #include "Triangle.h"
 
+#define SDL_MAIN_HANDLED
+#include "SDL.h"
+
+void InactiveWindow(void);
+void ActiveWindow(void);
+
 std::string gModulePath;
 std::string gDataPath;
 
 BOOL bFullscreen;
+
+CONFIG conf;
 
 CONFIG_BINDING bindings[BINDING_TOTAL];
 
@@ -39,8 +55,21 @@ static BOOL bFPS = FALSE;
 #ifdef JAPANESE
 static const char* const lpWindowName = "洞窟物語";	// "Cave Story"
 #else
-static const char* const lpWindowName = "Cave Story ~ Doukutsu Monogatari";
+static const char* const lpWindowName = "Cave Story Extended ~ Doukutsu Monogatari";
 #endif
+
+static void DragAndDropCallback(const char *path)
+{
+	LoadProfile(path);
+}
+
+static void WindowFocusCallback(bool focus)
+{
+	if (focus)
+		ActiveWindow();
+	else
+		InactiveWindow();
+}
 
 // Framerate stuff
 static unsigned long CountFramePerSecound(void)
@@ -83,7 +112,10 @@ void PutFramePerSecound(void)
 int main(int argc, char *argv[])
 {
 	(void)argc;
+	(void)argv;
 
+	printf("hi");
+	
 	if (!Backend_Init())
 		return EXIT_FAILURE;
 
@@ -102,7 +134,6 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-
 	// Get path of the data folder
 	gDataPath = gModulePath + "/data";
 
@@ -121,7 +152,7 @@ int main(int argc, char *argv[])
 		default:
 			// Windowed
 
-		#ifdef FIX_BUGS
+		#ifdef FIX_MAJOR_BUGS
 			if (!StartDirectDraw(lpWindowName, conf.display_mode, conf.b60fps, conf.bSmoothScrolling, conf.bVsync))
 			{
 				Backend_Deinit();
@@ -137,7 +168,7 @@ int main(int argc, char *argv[])
 		case 0:
 			// Fullscreen
 
-		#ifdef FIX_BUGS
+		#ifdef FIX_MAJOR_BUGS
 			if (!StartDirectDraw(lpWindowName, 0, conf.b60fps, conf.bSmoothScrolling, conf.bVsync))
 			{
 				Backend_Deinit();
@@ -155,7 +186,7 @@ int main(int argc, char *argv[])
 	}
 
 #ifdef DEBUG_SAVE
-	PlaybackBackend_EnableDragAndDrop();
+	Backend_EnableDragAndDrop();
 #endif
 
 	// Set up window icon
@@ -267,6 +298,85 @@ void ActiveWindow(void)
 
 void JoystickProc(void);
 
+static bool DoDebugKeyPress(int key)
+{
+	//if (!conf.bDebug) return true;
+
+	if (key == BACKEND_KEYBOARD_BACK_QUOTE)
+	{
+		gConsole.visible ^= 1;
+		if (gConsole.visible)
+		{
+			PlaySoundObject(SND_SWITCH_WEAPON, SOUND_MODE_PLAY);
+			SDL_StartTextInput();
+		}
+		else
+		{
+			SDL_StopTextInput();
+		}	
+		gKeyTrg = gKey = 0; 
+		ClearConsole();
+		return false;
+	}
+	else if (gConsole.visible)
+	{
+		ConsoleProc(key);
+		return false;
+	}
+		
+	if (key == BACKEND_KEYBOARD_C)
+	{
+		gDebug.bFrameFreeze = true;
+		gDebug.bFrameCanAdvance = true;
+		ConsoleRespond("Frame %i", ++gDebug.FrameAdvanceCount);
+	}
+	if (key == BACKEND_KEYBOARD_SPACE)
+	{
+		gDebug.bFrameFreeze = false;
+		gDebug.bFrameCanAdvance = false;
+		gDebug.FrameAdvanceCount = 0; 
+		gConsole.response[0] = 0;
+	}
+
+	if (key == BACKEND_KEYBOARD_F1)
+	{
+		gDebug.bGodmode ^= 1;
+		PlaySoundObject(18, SOUND_MODE_PLAY);
+	}
+	if (key == BACKEND_KEYBOARD_F2)
+		gDebug.bNoclip = true;
+	if(key == BACKEND_KEYBOARD_F4)
+	{
+		//TODO: make this not do anything in modetitle or opening
+		SaveProfile(NULL);
+		ConsoleRespond("Saved.");
+		PlaySoundObject(SND_SWITCH_WEAPON, SOUND_MODE_PLAY);
+	}
+	if (key == BACKEND_KEYBOARD_F5)
+		gDebug.bFastForward = true;
+
+	if (key == BACKEND_KEYBOARD_F6)
+	{
+		gDebug.bShowHitboxes ^= 1;
+		PlaySoundObject(SND_ENEMY_SHOOT_PROJETILE, SOUND_MODE_PLAY);
+	}
+
+	return true;
+}
+
+static bool DoDebugKeyRelease(int key)
+{
+	//if (!conf.bDebug) return true;
+
+	if (key == BACKEND_KEYBOARD_F2)
+		gDebug.bNoclip = false;
+	if (key == BACKEND_KEYBOARD_F5)
+		gDebug.bFastForward = false;
+	
+	return true;
+}
+
+
 BOOL SystemTask(void)
 {
 	static bool previous_keyboard_state[BACKEND_KEYBOARD_TOTAL];
@@ -274,7 +384,10 @@ BOOL SystemTask(void)
 	do
 	{
 		if (!Backend_SystemTask(bActive))
+		{
+			StopOrganyaMusic();
 			return FALSE;
+		}
 	} while(!bActive);
 
 	Backend_GetKeyboardState(gKeyboardState);
@@ -283,6 +396,8 @@ BOOL SystemTask(void)
 	{
 		if (gKeyboardState[i] && !previous_keyboard_state[i])
 		{
+			if (!DoDebugKeyPress(i))
+				break;
 			if (i == BACKEND_KEYBOARD_ESCAPE)
 				gKey |= KEY_ESCAPE;
 			else if (i == BACKEND_KEYBOARD_F1)
@@ -319,6 +434,9 @@ BOOL SystemTask(void)
 		}
 		else if (!gKeyboardState[i] && previous_keyboard_state[i])
 		{
+			if (gConsole.visible) break;
+			if (!DoDebugKeyRelease(i))
+				break;
 			if (i == BACKEND_KEYBOARD_ESCAPE)
 				gKey &= ~KEY_ESCAPE;
 			else if (i == BACKEND_KEYBOARD_F1)
@@ -367,7 +485,6 @@ void JoystickProc(void)
 {
 	int i;
 	static JOYSTICK_STATUS old_status;
-
 	if (!GetJoystickStatus(&gJoystickState))
 		memset(&gJoystickState, 0, sizeof(gJoystickState));
 

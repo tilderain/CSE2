@@ -297,7 +297,16 @@ bool Backend_SystemTask(bool active)
 			case SDL_RENDER_TARGETS_RESET:
 				RenderBackend_HandleRenderTargetLoss();
 				break;
-
+			case SDL_TEXTINPUT:
+				//Dumb hack to stop the first character from being ` on opening
+				if(strcmp(event.text.text, "`") == 0) break;
+				
+				if(gConsole.text_pos + 1 < CONSOLE_MAX_TEXT)
+				{
+					strcat(gConsole.text, event.text.text);
+					gConsole.text_pos++;
+				}
+				break;
 		}
 	}
 

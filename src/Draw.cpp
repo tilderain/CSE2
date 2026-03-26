@@ -44,6 +44,7 @@ static RenderBackend_Surface *framebuffer;	// TODO - Not the original variable n
 static RenderBackend_Surface *surf[SURFACE_ID_MAX];
 
 static FontObject *font;	// TODO - Not the original variable name
+#include "Debug.h"
 
 // This doesn't exist in the Linux port, so none of these symbol names are accurate
 static struct
@@ -57,6 +58,8 @@ static struct
 
 BOOL Flip_SystemTask(void)
 {
+
+	PutConsole();
 	// TODO - Not the original variable names
 	static unsigned long timePrev;
 	static unsigned long timeNow;
@@ -82,6 +85,13 @@ BOOL Flip_SystemTask(void)
 			// Framerate limiter
 			timeNow = Backend_GetTicks();
 
+			if (gDebug.bFastForward)
+			{
+				Backend_Delay(3);
+				timePrev = timeNow;
+				break;
+			}
+
 			if (timeNow >= timePrev + delay)
 				break;
 
@@ -94,7 +104,34 @@ BOOL Flip_SystemTask(void)
 			timePrev += delay;
 	}
 
-	RenderBackend_DrawScreen();
+	if(gbVsync && gDebug.bFastForward)
+	{
+		if (gDebug.FastForwardTimer++ % 5 == 0)
+			RenderBackend_DrawScreen();
+	}
+	else
+	{
+		RenderBackend_DrawScreen();
+	}
+	
+	while (gDebug.bFrameFreeze)
+	{
+		if (!SystemTask())
+			return FALSE;
+		if(gDebug.bFrameCanAdvance)
+		{
+			gDebug.bFrameCanAdvance = false;
+			break;
+		}
+		Backend_Delay(20);
+	}
+#ifdef _3DS
+	// This would go in Backend_SystemTask, but that causes a hang
+	// because of a race condition: aptMainLoop cannot be called
+	// between C3D_FrameBegin and C3D_FrameEnd
+	if (!aptMainLoop())
+		return false;
+#endif
 
 	if (RestoreSurfaces())
 	{
@@ -578,6 +615,23 @@ unsigned long GetCortBoxColor(unsigned long col)
 	// Comes in 00BBGGRR, goes out 00BBGGRR
 	return col;
 }
+
+
+void CortBoxUnscaled(const RECT *rect, unsigned long col)
+{
+	static RenderBackend_Rect dst_rect;
+	dst_rect.left = rect->left;
+	dst_rect.top = rect->top;
+	dst_rect.right = rect->right;
+	dst_rect.bottom = rect->bottom;
+
+	const unsigned char red = col & 0xFF;
+	const unsigned char green = (col >> 8) & 0xFF;
+	const unsigned char blue = (col >> 16) & 0xFF;
+
+	RenderBackend_ColourFill(framebuffer, &dst_rect, red, green, blue, 0xFF);
+}
+
 
 void CortBox(const RECT *rect, unsigned long col)
 {
