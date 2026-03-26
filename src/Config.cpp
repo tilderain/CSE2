@@ -52,6 +52,12 @@ BOOL LoadConfigData(CONFIG *conf)
 	// Read soundtrack value
 	conf->soundtrack = fgetc(fp);
 
+	// Read debug keys toggle
+	conf->bDebug = fgetc(fp);
+
+	// Read skip intro toggle
+	conf->bSkipIntro = fgetc(fp);
+
 	// Read key-bindings
 	for (size_t i = 0; i < BINDING_TOTAL; ++i)
 	{
@@ -101,6 +107,12 @@ BOOL SaveConfigData(const CONFIG *conf)
 	// Write soundtrack value
 	fputc(conf->soundtrack, fp);
 
+	// Read debug keys toggle
+	fputc(conf->bDebug, fp);
+
+	// Read skip intro toggle
+	fputc(conf->bSkipIntro, fp);
+	
 	// Write key-bindings
 	for (size_t i = 0; i < BINDING_TOTAL; ++i)
 	{

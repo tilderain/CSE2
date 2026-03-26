@@ -830,6 +830,9 @@ BOOL Game(void)
 	InitConsole();
 
 	mode = 1;
+
+	if(conf.bSkipIntro) {mode = 3; bContinue = TRUE;}
+
 	while (mode)
 	{
 		if (mode == 1)

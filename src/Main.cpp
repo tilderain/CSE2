@@ -137,7 +137,6 @@ int main(int argc, char *argv[])
 	// Get path of the data folder
 	gDataPath = gModulePath + "/data";
 
-	CONFIG conf;
 	if (!LoadConfigData(&conf))
 		DefaultConfigData(&conf);
 
