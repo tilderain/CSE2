@@ -565,6 +565,88 @@ static int ModeTitle(void)
 	return 3;
 }
 
+void DoFireSpread(int param_1, int param_2)
+{
+    // Runs every 5 frames
+    static int sTimer = 0;   // This is 0x44BGImageFile
+    if (++sTimer < 5)
+        return;
+    sTimer = 0;
+
+    // Convert subpixel camera position to tile coordinates
+    // with floor division rounding, then offset +8 tiles
+    // to center the scan region on screen
+    int base_x = ((param_1 + (param_1 >> 31 & 0x1ff)) >> 9) + 8;
+    base_x = (base_x + (base_x >> 31 & 0xf)) >> 4;
+
+    int base_y = ((param_2 + (param_2 >> 31 & 0x1ff)) >> 9) + 8;
+    base_y = (base_y + (base_y >> 31 & 0xf)) >> 4;
+
+    // Scan region: 0x15=21 wide, 0x10=16 tall
+    int scan_w = 0x30;
+    int scan_h = 0x20;
+
+    // --- PASS 1: Spread fire from burning tiles (0x4c) to adjacent flammable tiles (0x4e) ---
+    for (int ty = base_y; ty < base_y + scan_h; ++ty)
+    {
+        for (int tx = base_x; tx < base_x + scan_w; ++tx)
+        {
+            if ((uint8_t)GetAttribute(tx, ty) != 0x4c)
+                continue;
+
+            // Check all 4 neighbours for flammable unlit tile (0x4e)
+            if ((uint8_t)GetAttribute(tx, ty + 1) == 0x4e)
+            {
+                ShiftMapParts(tx, ty + 1);   // 0x4e → 0x4d
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+            if ((uint8_t)GetAttribute(tx, ty - 1) == 0x4e)
+            {
+                ShiftMapParts(tx, ty - 1);
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+            if ((uint8_t)GetAttribute(tx + 1, ty) == 0x4e)
+            {
+                ShiftMapParts(tx + 1, ty);
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+            if ((uint8_t)GetAttribute(tx - 1, ty) == 0x4e)
+            {
+                ShiftMapParts(tx - 1, ty);
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+        }
+    }
+
+    // --- PASS 2: Advance all active burn states ---
+    for (int ty = base_y; ty < base_y + scan_h; ++ty)
+    {
+        for (int tx = base_x; tx < base_x + scan_w; ++tx)
+        {
+            uint8_t atrb = (uint8_t)GetAttribute(tx, ty);
+
+            if (atrb == 0x4d || atrb == 0x4c || atrb == 0x4b || atrb == 0x4a)
+            {
+                // Advance burn state: 0x4d→0x4c→0x4b→0x4a→0x49
+                ShiftMapParts(tx, ty);
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+            else if (atrb == 0x49)
+            {
+                // Final state — spawn ash/destruction effect then burn out
+                // SetDestroyNpChar uses raw subpixel coords: tile * 0x200 * 0x10 = tile << 13
+                // But ASM passes tx and ty with the floor-div rounding applied again:
+                // tx + (tx >> 31 & 0x1ff), ty + (ty >> 31 & 0x1ff)
+                // For positive tile coords this is just tx and ty
+                SetDestroyNpChar(tx, ty, 0x1500, 0x30);
+                ShiftMapParts(tx, ty);   // 0x49 → 0x48 (ash)
+                PlaySoundObject(0x22, SOUND_MODE_PLAY);
+            }
+        }
+    }
+}
+
+
 static int ModeAction(void)
 {
 	int frame_x;
@@ -691,6 +773,7 @@ static int ModeAction(void)
 		CortBox(&grcFull, color);
 		GetFramePosition(&frame_x, &frame_y);
 		PutBack(frame_x, frame_y);
+		DoFireSpread(frame_x, frame_y);
 		PutStage_Back(frame_x, frame_y);
 		PutBossChar(frame_x, frame_y);
 		PutNpChar(frame_x, frame_y);
