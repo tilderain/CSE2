@@ -1708,21 +1708,22 @@ void ActBullet_Spine(BULLET *bul)
 			break;
 	}
 }
-
 void ActBullet_Sword1(BULLET *bul)
 {
 	if (++bul->count1 > bul->life_count)
 	{
 		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 3, 0);
+		SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
 		return;
 	}
 
+	// Mod: After 3 frames, the blade can pass through solid walls
 	if (bul->count1 == 3)
-		bul->bbits &= ~4;
+		bul->bbits &= ~NPC_SOLID_HARD;
 
+	// Play swoosh sound
 	if (bul->count1 % 5 == 1)
-		PlaySoundObject(34, SOUND_MODE_PLAY);
+		PlaySoundObject(34, SOUND_MODE_PLAY); // 0x22
 
 	if (bul->act_no == 0)
 	{
@@ -1730,18 +1731,10 @@ void ActBullet_Sword1(BULLET *bul)
 
 		switch (bul->direct)
 		{
-			case 0:
-				bul->xm = -0x800;
-				break;
-			case 1:
-				bul->ym = -0x800;
-				break;
-			case 2:
-				bul->xm = 0x800;
-				break;
-			case 3:
-				bul->ym = 0x800;
-				break;
+			case DIR_LEFT:  bul->xm = -0x800; break;
+			case DIR_UP:    bul->ym = -0x800; break;
+			case DIR_RIGHT: bul->xm =  0x800; break;
+			case DIR_DOWN:  bul->ym =  0x800; break;
 		}
 	}
 	else
@@ -1750,103 +1743,178 @@ void ActBullet_Sword1(BULLET *bul)
 		bul->y += bul->ym;
 	}
 
-	RECT rcLeft[4] = {
-		{0, 48, 16, 64},
-		{16, 48, 32, 64},
-		{32, 48, 48, 64},
-		{48, 48, 64, 64},
+	// Restored RECTs from the assembly's local variables
+	static const RECT rect_l[] = {
+		{0, 48, 16, 64}, {16, 48, 32, 64}, {32, 48, 48, 64}, {48, 48, 64, 64}
 	};
-
-	RECT rcRight[4] = {
-		{64, 48, 80, 64},
-		{80, 48, 96, 64},
-		{96, 48, 112, 64},
-		{112, 48, 128, 64},
+	static const RECT rect_r[] = {
+		{64, 48, 80, 64}, {80, 48, 96, 64}, {96, 48, 112, 64}, {112, 48, 128, 64}
 	};
 
 	if (++bul->ani_wait > 1)
 	{
 		bul->ani_wait = 0;
-		++bul->ani_no;
+		if (++bul->ani_no > 3)
+			bul->ani_no = 0;
 	}
 
-	if (bul->ani_no > 3)
-		bul->ani_no = 0;
-
-	if (bul->direct == 0)
-		bul->rect = rcLeft[bul->ani_no];
+	if (bul->direct == DIR_LEFT)
+		bul->rect = rect_l[bul->ani_no];
 	else
-		bul->rect = rcRight[bul->ani_no];
+		bul->rect = rect_r[bul->ani_no];
 }
-
 void ActBullet_Sword2(BULLET *bul)
 {
-	if (++bul->count1 > bul->life_count)
-	{
-		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 3, 0);
-		return;
-	}
+    int bul_x = bul->x;
+    int bul_y = bul->y;
+    int mc_x  = gMC.x;
+    int mc_y  = gMC.y;
 
-	if (bul->count1 == 3)
-		bul->bbits &= ~4;
+    if (bul->act_no != 2)
+    {
+        if (bul->act_no == 0)
+        {
+            bul->act_wait = 0;
+            bul->act_no   = 1;
 
-	if (bul->count1 % 7 == 1)
-		PlaySoundObject(106, SOUND_MODE_PLAY);
+            int level = 0;
+			for (int i = 0; i < ARMS_MAX; ++i)
+			if (gArmsData[i].code == 9) { level = gArmsData[i].level; break;  }
 
-	if (bul->act_no == 0)
-	{
-		bul->act_no = 1;
+            bul->life_count = (level * 25 + 25) * 2;
+            bul->damage     = (level + 3) / 2;
 
-		switch (bul->direct)
-		{
-			case 0:
-				bul->xm = -0x800;
-				break;
-			case 1:
-				bul->ym = -0x800;
-				break;
-			case 2:
-				bul->xm = 0x800;
-				break;
-			case 3:
-				bul->ym = 0x800;
-				break;
-		}
-	}
-	else
-	{
-		bul->x += bul->xm;
-		bul->y += bul->ym;
-	}
+            bul->xm = 0;
+            bul->ym = 0;
+            switch (bul->direct)
+            {
+                case 0: bul->xm = -0x800; break;
+                case 1: bul->ym = -0x800; break;
+                case 2: bul->xm =  0x800; break;
+                case 3: bul->ym =  0x800; break;
+            }
+            goto move;
+        }
 
-	RECT rcLeft[4] = {
-		{160, 48, 184, 72},
-		{184, 48, 208, 72},
-		{208, 48, 232, 72},
-		{232, 48, 256, 72},
-	};
+        // act_no == 1: check wall collision
+        if (bul->flag & (0x1 | 0x2 | 0x4 | 0x8))
+        {
+            SetCaret(bul->x + bul->ym, bul->y + bul->xm, 3, 0);
+            PlaySoundObject(0x6d, SOUND_MODE_PLAY);
+            // fall through to act_no = 2
+        }
+        else if (bul->count1 < bul->life_count)
+        {
+            bul->count1++;
 
-	RECT rcRight[4] = {
-		{160, 72, 184, 96},
-		{184, 72, 208, 96},
-		{208, 72, 232, 96},
-		{232, 72, 256, 96},
-	};
+            if (gKey & KEY_MAP)
+            {
+                if (gKey & KEY_MAP)
+                {
+                    int steer_x = bul->xm;
+                    int steer_y = bul->ym;
 
-	if (++bul->ani_wait > 1)
-	{
-		bul->ani_wait = 0;
-		++bul->ani_no;
-	}
+                    if (gKey & KEY_LEFT)  steer_x -= 0x400;
+                    if (gKey & KEY_UP)    steer_y -= 0x400;
+                    if (gKey & KEY_RIGHT) steer_x += 0x400;
+                    if (gKey & KEY_DOWN)  steer_y += 0x400;
 
-	if (bul->ani_no > 3)
-		bul->ani_no = 0;
+                    bul->xm /= 2;
+                    bul->ym /= 2;
 
-	if (bul->direct == 0)
-		bul->rect = rcLeft[bul->ani_no];
-	else
-		bul->rect = rcRight[bul->ani_no];
+                    steer_x += bul->xm;
+                    steer_y += bul->ym;
+
+                    if (steer_x >  0x600) steer_x =  0x600;
+                    if (steer_x < -0x600) steer_x = -0x600;
+                    if (steer_y >  0x600) steer_y =  0x600;
+                    if (steer_y < -0x600) steer_y = -0x600;
+
+                    bul->xm = steer_x;
+                    bul->ym = steer_y;
+                }
+                goto move;
+            }
+            else if ((gKeyTrg & gKeyShot)
+                     && gArmsData[gSelectedArms].code == 9)
+            {
+                // fall through to act_no = 2
+            }
+            else
+            {
+                goto move;
+            }
+        }
+        // count1 >= life_count: fall through to act_no = 2
+
+        bul->act_no = 2;
+        // NOPs were here — original set bbits to ignore walls during return
+        // Restore: set the ignore-wall flag so homing phase passes through geometry
+        bul->bbits |= 0x4;
+    }
+
+    // act_no == 2: homing
+    {
+        bul->count1 = 0x10;
+
+        int dist_x = bul_x - mc_x;
+        int dist_y = bul_y - mc_y;
+        if (dist_x < 0) dist_x = -dist_x;
+        if (dist_y < 0) dist_y = -dist_y;
+
+        if (((dist_x + dist_y) >> 1) <= 0x1000)
+        {
+            bul->cond = 0;
+            SetCaret(bul->x, bul->y, 4, 0);
+            return;
+        }
+
+        bul->xm /= 2;
+        bul->ym /= 2;
+
+        int hx = (dist_x > 0x400) ? 0x400 : (dist_x < 0) ? 0 : dist_x;
+        int hy = (dist_y > 0x400) ? 0x400 : (dist_y < 0) ? 0 : dist_y;
+
+        if (mc_x > bul_x) bul->xm += hx; else bul->xm -= hx;
+        if (mc_y > bul_y) bul->ym += hy; else bul->ym -= hy;
+    }
+
+move:
+    bul->act_wait++;
+    if (bul->act_wait >= 7)
+    {
+        bul->act_wait = 0;
+        PlaySoundObject(0x6e, SOUND_MODE_PLAY);
+    }
+
+    bul->x += bul->xm;
+    bul->y += bul->ym;
+
+    static const RECT rect_left[4] = {
+        {0xA0, 0x30, 0xB8, 0x48},
+        {0xB8, 0x30, 0xD0, 0x48},
+        {0xD0, 0x30, 0xE8, 0x48},
+        {0xE8, 0x30, 0x00, 0x48},
+    };
+    static const RECT rect_right[4] = {
+        {0xA0, 0x48, 0xB8, 0x60},
+        {0xB8, 0x48, 0xD0, 0x60},
+        {0xD0, 0x48, 0xE8, 0x60},
+        {0xE8, 0x48, 0x00, 0x60},
+    };
+
+    bul->ani_wait++;
+    if (bul->ani_wait > 1)
+    {
+        bul->ani_wait = 0;
+        bul->ani_no++;
+    }
+    if (bul->ani_no > 3) bul->ani_no = 0;
+
+    if (bul->direct == 0)
+        bul->rect = rect_left[bul->ani_no];
+    else
+        bul->rect = rect_right[bul->ani_no];
 }
 
 void ActBullet_Sword3(BULLET *bul)
@@ -1967,69 +2035,149 @@ void ActBullet_Sword3(BULLET *bul)
 		bul->rect.right = 0;
 }
 
+
+// Global toggle used to alternate slash animations/positions 
+unsigned char gSwordState; 
+
+
 void ActBullet_Edge(BULLET *bul)
 {
-	switch (bul->act_no)
+	// Initialization
+	if (bul->act_no != 1)
 	{
-		case 0:
-			bul->act_no = 1;
-			bul->y -= 12 * 0x200;
-
-			if (bul->direct == 0)
-				bul->x += 16 * 0x200;
-			else
-				bul->x -= 16 * 0x200;
-			// Fallthrough
-		case 1:
-			if (++bul->ani_wait > 2)
-			{
-				bul->ani_wait = 0;
-				++bul->ani_no;
-			}
-
-			if (bul->direct == 0)
-				bul->x -= 2 * 0x200;
-			else
-				bul->x += 2 * 0x200;
-
-			bul->y += 2 * 0x200;
-
-			if (bul->ani_no == 1)
-				bul->damage = 2;
-			else
-				bul->damage = 1;
-
-			if (bul->ani_no > 4)
-			{
-				bul->cond = 0;
-			#ifdef FIX_BUGS
-				return;	// The code below will use 'ani_no' to access 'rcLeft' and 'rcRight', even though it's now too high
-			#endif
-			}
-
-			break;
+		bul->act_no = 1;
+		bul->act_wait = 4; // Damage frequency timer
+		
+		// Alternates the sword "state" toggle every time a new slash is created
+		if (gSwordState == 0)
+			gSwordState = 1;
+		else
+			gSwordState = 0;
 	}
 
-	RECT rcLeft[5] = {
-		{0, 64, 24, 88},
-		{24, 64, 48, 88},
-		{48, 64, 72, 88},
-		{72, 64, 96, 88},
-		{96, 64, 120, 88},
-	};
+	// Pin the bullet to Quote's current position
+	bul->x = gMC.x;
+	bul->y = gMC.y;
 
-	RECT rcRight[5] = {
-		{0, 88, 24, 112},
-		{24, 88, 48, 112},
-		{48, 88, 72, 112},
-		{72, 88, 96, 112},
-		{96, 88, 120, 112},
-	};
-
-	if (bul->direct == 0)
-		bul->rect = rcLeft[bul->ani_no];
+	// Position the slash in front of Quote based on aiming direction
+	if (gMC.down)
+	{
+		// Aiming Down
+		if (gMC.direct == DIR_LEFT)
+		{
+			bul->x -= 0x1000; // 8 pixels left
+			bul->y += 0x2200; // 17 pixels down
+		}
+		else
+		{
+			bul->x += 0x1000; // 8 pixels right
+			bul->y += 0x2800; // 20 pixels down
+		}
+	}
+	else if (gMC.up)
+	{
+		// Aiming Up
+		if (gMC.direct == DIR_LEFT)
+		{
+			bul->x -= 0x1400; // 10 pixels left
+			bul->y -= 0x2200; // 17 pixels up
+		}
+		else
+		{
+			bul->x += 0x1400; // 10 pixels right
+			bul->y -= 0x2800; // 20 pixels up
+		}
+	}
 	else
-		bul->rect = rcRight[bul->ani_no];
+	{
+		// Aiming Horizontally
+		if (gMC.direct == DIR_LEFT)
+		{
+			bul->x -= 0x2000; // 16 pixels left
+			bul->y -= 0x400;  // 2 pixels up
+		}
+		else
+		{
+			bul->x += 0x2000; // 16 pixels right
+			bul->y -= 0x400;  // 2 pixels up
+		}
+	}
+
+	// Logic: Animation Speed scaling by Weapon Level (Weapon ID 9)
+	bul->count1++; 
+	int level = 0;
+	for (int i = 0; i < ARMS_MAX; ++i)
+		if (gArmsData[i].code == 9) { level = gArmsData[i].level; break; }
+
+	// Assembly logic: (3 - level) < count1 determines frame advance speed
+	// Level 3 slashes move frames much faster than Level 1.
+	if ((3 - level) < bul->count1)
+	{
+		bul->count1 = 0;
+		bul->ani_no++;
+	}
+
+	// Logic: Damage / Hitbox frequency
+	if (--bul->act_wait == 0)
+	{
+		if (bul->damage != 0)
+		{
+			bul->act_wait = 4;
+			bul->damage = 0;
+		}
+		else
+		{
+			// Damage scaling formula from ASM: (level * level) + 8
+			bul->damage = (level * level) + 8;
+			bul->act_wait = 1;
+		}
+	}
+	else
+	{
+		bul->damage = 0;
+	}
+
+	// Destroy slash after 5 frames of animation
+	if (bul->ani_no > 4)
+	{
+		bul->cond = 0;
+		return;
+	}
+
+	// Correct RECT Tables (Restored from assembly stack logic)
+	// These frames are 24x24 pixels wide.
+	static const RECT rcLeft[] = {
+		{0, 64, 24, 88}, {24, 64, 48, 88}, {48, 64, 72, 88}, {72, 64, 96, 88}, {96, 64, 120, 88}
+	};
+	static const RECT rcRight[] = {
+		{0, 88, 24, 112}, {24, 88, 48, 112}, {48, 88, 72, 112}, {72, 88, 96, 112}, {96, 88, 120, 112}
+	};
+	static const RECT rcUp[] = {
+		{0, 112, 24, 136}, {24, 112, 48, 136}, {48, 112, 72, 136}, {72, 112, 96, 136}, {96, 112, 120, 136}
+	};
+	static const RECT rcDown[] = {
+		{0, 136, 24, 160}, {24, 136, 48, 160}, {48, 136, 72, 160}, {72, 136, 96, 160}, {96, 136, 120, 160}
+	};
+
+	// Determine which RECT set to use based on aiming and gSwordState
+	if (gMC.down)
+	{
+		bul->rect = (gMC.direct == DIR_LEFT) ? rcDown[bul->ani_no] : rcDown[bul->ani_no];
+		// Assembly note: Downwards slashes use the rcDown set directly
+	}
+	else if (!gMC.up)
+	{
+		// Horizontal: Alternates between High and Low slash animations
+		if (gMC.direct == DIR_LEFT)
+			bul->rect = (gSwordState != 0) ? rcDown[bul->ani_no] : rcLeft[bul->ani_no];
+		else
+			bul->rect = (gSwordState != 0) ? rcDown[bul->ani_no] : rcRight[bul->ani_no];
+	}
+	else
+	{
+		// Upwards slashes
+		bul->rect = rcUp[bul->ani_no];
+	}
 }
 
 void ActBullet_Drop(BULLET *bul)

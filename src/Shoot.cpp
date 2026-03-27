@@ -741,56 +741,104 @@ void ShootBullet_Bubblin2(int level)
 	}
 }
 
+
+// Note: DAT_0049e678 appears to be a frame counter or global timer
+int gModTimer; 
+
+#include "Map.h"
+
+
 void ShootBullet_Sword(int level)
 {
-	int bul_no;
+    int bul_no;
+    int bul_x;
+    int bul_y;
+    int bul_dir;
 
-	if (CountArmsBullet(9) > 0)
-		return;
+    // Check if boomerang (26) already exists — bail if so
+    if (CountBulletNum(26) != 0)
+        return;
 
-	switch (level)
-	{
-		case 1:
-			bul_no = 25;
-			break;
+    if (!(gKey & gKeyShot))
+    {
+        // Alt-fire: boomerang (map key pressed)
+        if (!(gKeyTrg & gKeyMap))
+            return;
 
-		case 2:
-			bul_no = 26;
-			break;
+        bul_no = 26;   // 0x1a
 
-		case 3:
-			bul_no = 27;
-			break;
-	}
+        // Zero VelocityX only when on slope tiles AND moving fast
+        if (!gMC.down
+            && (gMC.flag & 0x3d) != 0
+            && gMC.ani_no > 3)
+        {
+            gMC.xm = 0;
+        }
+    }
+    else
+    {
+        // Standard fire: slash (23)
+        // Bail if slash already exists
+        if (CountBulletNum(23) != 0)
+            return;
 
-	if (gKeyTrg & gKeyShot)
-	{
-		if (gMC.up)
-		{
-			if (gMC.direct == 0)
-				SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y + (4 * 0x200), 1);
-			else
-				SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y + (4 * 0x200), 1);
-		}
-		else if (gMC.down)
-		{
-			if (gMC.direct == 0)
-				SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y - (6 * 0x200), 3);
-			else
-				SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y - (6 * 0x200), 3);
-		}
-		else
-		{
-			if (gMC.direct == 0)
-				SetBullet(bul_no, gMC.x + (6 * 0x200), gMC.y - (3 * 0x200), 0);
-			else
-				SetBullet(bul_no, gMC.x - (6 * 0x200), gMC.y - (3 * 0x200), 2);
-		}
+        bul_no = 23;   // 0x17
+    }
 
-		PlaySoundObject(34, SOUND_MODE_PLAY);
-	}
+    // Cache player state
+    bul_x   = gMC.x;
+    bul_y   = gMC.y;
+    bul_dir = gMC.direct;   // 0=left, 2=right
+
+    int facing_vert = gMC.up + gMC.down;   // IsFacingUp + IsFacingDown
+
+    if (facing_vert != 0)
+    {
+        // Diagonal/vertical fire
+        // X offset based on facing direction
+        if (gMC.direct != 0)   // facing right
+            bul_x += 0x600;
+        else
+            bul_x -= 0x600;
+
+        if (gMC.up)
+        {
+            // Shooting up
+            // Boomerang always gets DIR_UP(1), slash gets DIR_UP only if facing right
+            // If slash AND facing left: dir stays 0 (left)
+            if (bul_no == 26 || gMC.direct != 0)
+                bul_dir = 1;   // DIR_UP
+            // else bul_dir stays as gMC.direct (0 = left)
+
+            bul_y -= 0x1200;
+        }
+        else
+        {
+            // Shooting down
+            bul_dir = 3;   // DIR_DOWN
+            bul_y  += 0x1200;
+        }
+    }
+    else
+    {
+        // Horizontal fire
+        bul_y -= 0x600;
+
+        // bul_x starts as a velocity/offset, added to PlayerX later
+        if (gMC.direct != 0)   // facing right
+            bul_x = 0xC00;
+        else
+            bul_x = -0xC00;    // 0xFFFFF400
+
+        // Add player X position (only done for horizontal, not diagonal)
+        bul_x += gMC.x;
+    }
+
+    // Sound: boomerang=106(0x6a), slash=110(0x6e)
+    PlaySoundObject((bul_no == 26) ? 0x6a : 0x6e, SOUND_MODE_PLAY);
+
+    SetBullet(bul_no, bul_x, bul_y, bul_dir);
 }
-
 void ShootBullet_Nemesis(int level)
 {
 	int bul_no;
