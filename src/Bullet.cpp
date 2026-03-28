@@ -127,75 +127,91 @@ void ActBullet_FireBall_Explosion(BULLET *bul)
 //-----------------------------------------------------
 void ActBullet_MachineGun(BULLET *bul, int level)
 {
+	// RECT tables for the three levels of the Machine Gun
+	// These are typically defined in the function or as static data
+	RECT rect_lv1[4] = {
+		{64, 0, 80, 16}, {80, 0, 96, 16}, {96, 0, 112, 16}, {112, 0, 128, 16}
+	};
+	RECT rect_lv2[4] = {
+		{64, 16, 80, 32}, {80, 16, 96, 32}, {96, 16, 112, 32}, {112, 16, 128, 32}
+	};
+	RECT rect_lv3[4] = {
+		{64, 32, 80, 48}, {80, 32, 96, 48}, {96, 32, 112, 48}, {112, 32, 128, 48}
+	};
+
+	// Lifespan management
 	if (++bul->count1 > bul->life_count)
 	{
 		bul->cond = 0;
-		SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
+		SetCaret(bul->x, bul->y, 3, 0);
 		return;
 	}
 
+	// Initializing bullet state
 	if (bul->act_no == 0)
 	{
-		int move = 0x1000;
 		bul->act_no = 1;
 
-		// Mod modification: Spread adjustment based on flags
-		int spread = 0x90;
-		if (GetNPCFlag(563))
-			spread = 0x10;
-		else if (GetNPCFlag(564))
-			spread = 0x50;
+		int speed = 0x1000; // 8.0 pixels per frame
+		int spread;
 
+		// MOD: Dynamic accuracy check based on NPC Flags (563 and 564)
+		if (GetNPCFlag(0x233))
+			spread = 0x10;  // High accuracy
+		else if (GetNPCFlag(0x234))
+			spread = 0x50;  // Medium accuracy
+		else
+			spread = 0x90;  // Default low accuracy (wobbly)
+
+		// Set velocity based on direction and randomized spread
 		switch (bul->direct)
 		{
-			case DIR_LEFT:
-				bul->xm = -move;
+			case 0: // Left
+				bul->xm = -speed;
 				bul->ym = Random(-spread, spread);
 				break;
-			case DIR_UP:
-				bul->ym = -move;
+			case 1: // Up
+				bul->ym = -speed;
 				bul->xm = Random(-spread, spread);
 				break;
-			case DIR_RIGHT:
-				bul->xm = move;
+			case 2: // Right
+				bul->xm = speed;
 				bul->ym = Random(-spread, spread);
 				break;
-			case DIR_DOWN:
-				bul->ym = move;
+			case 3: // Down
+				bul->ym = speed;
 				bul->xm = Random(-spread, spread);
 				break;
 		}
 	}
 	else
 	{
+		// Constant movement
 		bul->x += bul->xm;
 		bul->y += bul->ym;
 
-		RECT rect1[4] = {
-			{64, 0, 80, 16}, {80, 0, 96, 16}, {96, 0, 112, 16}, {112, 0, 128, 16},
-		};
-
-		RECT rect2[4] = {
-			{64, 16, 80, 32}, {80, 16, 96, 32}, {96, 16, 112, 32}, {112, 16, 128, 32},
-		};
-
-		RECT rect3[4] = {
-			{64, 32, 80, 48}, {80, 32, 96, 48}, {96, 32, 112, 48}, {112, 32, 128, 48},
-		};
-
-		switch (level)
+		// Level-specific behaviors and rendering
+		if (level == 1)
 		{
-			case 1:
-				bul->rect = rect1[bul->direct];
-				break;
-			case 2:
-				bul->rect = rect2[bul->direct];
-				SetNpChar(127, bul->x, bul->y, 0, 0, (bul->direct == DIR_UP || bul->direct == DIR_DOWN) ? 1 : 0, NULL, 0x100);
-				break;
-			case 3:
-				bul->rect = rect3[bul->direct];
-				SetNpChar(128, bul->x, bul->y, 0, 0, bul->direct, NULL, 0x100);
-				break;
+			bul->rect = rect_lv1[bul->direct];
+		}
+		else if (level == 2)
+		{
+			bul->rect = rect_lv2[bul->direct];
+
+			// Spawns "Trail" effects (NPC 127)
+			// If firing vertically, set effect direction to 1, else 0
+			if (bul->direct == 1 || bul->direct == 3)
+				SetNpChar(127, bul->x, bul->y, 0, 0, 1, NULL, 0x100);
+			else
+				SetNpChar(127, bul->x, bul->y, 0, 0, 0, NULL, 0x100);
+		}
+		else if (level == 3)
+		{
+			bul->rect = rect_lv3[bul->direct];
+
+			// Spawns "Trail" effects (NPC 128) following the bullet direction
+			SetNpChar(128, bul->x, bul->y, 0, 0, bul->direct, NULL, 0x100);
 		}
 	}
 }
@@ -2805,7 +2821,7 @@ void ActBullet(void)
 
 				case 4: ActBullet_PoleStar(&gBul[i], 1); break;
 				case 5: ActBullet_PoleStar(&gBul[i], 2); break;
-
+				case 6: ActBullet_PoleStar(&gBul[i], 3); break;
 				// Custom Modded Fireball
 				case 7: ActBullet_FireBall(&gBul[i], 0); break;
 				case 8: ActBullet_FireBall_Meteor(&gBul[i]); break;

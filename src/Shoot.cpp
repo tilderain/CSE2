@@ -91,22 +91,11 @@ void ShootBullet_PoleStar(int level)
 {
 	int bul_no;
 
-	switch (level)
-	{
-		case 1:
-			bul_no = 4;
-			break;
+	// The switch statement was optimized into a simple addition
+	bul_no = level + 3;
 
-		case 2:
-			bul_no = 5;
-			break;
-
-		case 3:
-			bul_no = 6;
-			break;
-	}
-
-	if (CountArmsBullet(2) > 1)
+	// The bullet limit was increased from 2 to 3
+	if (CountArmsBullet(2) > 2)
 		return;
 
 	if (gKeyTrg & gKeyShot)
@@ -229,132 +218,133 @@ void ShootBullet_FireBall(int level)
 		ChargeArmsEnergy(1);
 	}
 }
-
+int gFireTimer = 0;
+int gRechargeTimer = 0;
 void ShootBullet_Machinegun1(int level)
 {
-	int bul_no;
-	static int wait;
+	int bul_no = level + 9; // Lv1=10, Lv2=11, Lv3=12
+	int max_bul = 12;
+	int shot_count = 1;
 
-	if (CountArmsBullet(4) > 4)
-		return;
-
-	switch (level)
+	// Check for Multi-shot upgrades
+	if (GetNPCFlag(0x234))
 	{
-		case 1:
-			bul_no = 10;
-			break;
-
-		case 2:
-			bul_no = 11;
-			break;
-
-		case 3:
-			bul_no = 12;
-			break;
+		max_bul = 36;
+		shot_count = 3;
+	}
+	else if (GetNPCFlag(0x233))
+	{
+		shot_count = 2;
 	}
 
+	bool rapid_recharge = GetNPCFlag(0x232);
+
+	// Bullet limit check
+	if (CountArmsBullet(4) > max_bul)
+		return;
+
 	if (!(gKey & gKeyShot))
-		gMC.rensha = 6;
-
-	if (gKey & gKeyShot)
 	{
-		if (++gMC.rensha < 6)
-			return;
-
-		gMC.rensha = 0;
-
-		if (!UseArmsEnergy(1))
-		{
-			PlaySoundObject(37, SOUND_MODE_PLAY);
-
-			if (empty == 0)
-			{
-				SetCaret(gMC.x, gMC.y, 16, 0);
-				empty = 50;
-			}
-
-			return;
-		}
-
-		if (gMC.up)
-		{
-			if (level == 3)
-				gMC.ym += 0x100;
-
-			if (gMC.direct == 0)
-			{
-				SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y - (8 * 0x200), 1);
-				SetCaret(gMC.x - (3 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-			}
-			else
-			{
-				SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y - (8 * 0x200), 1);
-				SetCaret(gMC.x + (3 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-			}
-		}
-		else if (gMC.down)
-		{
-			if (level == 3)
-			{
-				if (gMC.ym > 0)
-					gMC.ym /= 2;
-
-				if (gMC.ym > -0x400)
-				{
-					gMC.ym -= 0x200;
-					if (gMC.ym < -0x400)
-						gMC.ym = -0x400;
-				}
-			}
-
-			if (gMC.direct == 0)
-			{
-				SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y + (8 * 0x200), 3);
-				SetCaret(gMC.x - (3 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-			}
-			else
-			{
-				SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y + (8 * 0x200), 3);
-				SetCaret(gMC.x + (3 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-			}
-		}
+		// NOT FIRING: Handle Manual Recharge
+		// Reset fire timer based on upgrade status
+		if (rapid_recharge)
+			gFireTimer = 7;
 		else
-		{
-			if (gMC.direct == 0)
-			{
-				SetBullet(bul_no, gMC.x - (12 * 0x200), gMC.y + (3 * 0x200), 0);
-				SetCaret(gMC.x - (12 * 0x200), gMC.y + (3 * 0x200), 3, 0);
-			}
-			else
-			{
-				SetBullet(bul_no, gMC.x + (12 * 0x200), gMC.y + (3 * 0x200), 2);
-				SetCaret(gMC.x + (12 * 0x200), gMC.y + (3 * 0x200), 3, 0);
-			}
-		}
+			gFireTimer = 9;
 
-		if (level == 3)
-			PlaySoundObject(49, SOUND_MODE_PLAY);
-		else
-			PlaySoundObject(32, SOUND_MODE_PLAY);
+		// Recharge logic (replaces vanilla auto-recharge)
+		if (++gRechargeTimer > (rapid_recharge ? 5 : 15))
+		{
+			gRechargeTimer = 0;
+			ChargeArmsEnergy(1);
+		}
 	}
 	else
 	{
-		++wait;
+		// FIRING: Handle Shot Logic
+		if (++gFireTimer > 7)
+		{
+			gFireTimer = 0;
 
-		if (gMC.equip & EQUIP_TURBOCHARGE)
-		{
-			if (wait > 1)
+			if (!UseArmsEnergy(shot_count))
 			{
-				wait = 0;
-				ChargeArmsEnergy(1);
+				PlaySoundObject(37, SOUND_MODE_PLAY); // Out of ammo
+				SetCaret(gMC.x, gMC.y, 16, 0);       // "Empty" caret
 			}
-		}
-		else
-		{
-			if (wait > 4)
+			else
 			{
-				wait = 0;
-				ChargeArmsEnergy(1);
+				int bul_x, bul_y;
+				int caret_x;
+				int shot_dir = gMC.direct;
+
+				// Determine spawn position based on player direction
+				if (gMC.up)
+				{
+					shot_dir = 1;
+					bul_x = (gMC.direct == 0) ? (gMC.x - 0x800) : (gMC.x + 0x800);
+					bul_y = gMC.y - 0x1000;
+					caret_x = bul_x;
+				}
+				else if (gMC.down)
+				{
+					shot_dir = 3;
+					bul_x = (gMC.direct == 0) ? (gMC.x - 0x800) : (gMC.x + 0x800);
+					bul_y = gMC.y + 0x1000;
+					caret_x = bul_x;
+				}
+				else
+				{
+					bul_y = gMC.y + 0x600;
+					if (gMC.direct == 0)
+					{
+						bul_x = gMC.x - 0x1200;
+						caret_x = gMC.x - 0x2400; // Muzzle flash offset
+					}
+					else
+					{
+						bul_x = gMC.x + 0x1200;
+						caret_x = gMC.x + 0x2400;
+					}
+				}
+
+				SetCaret(caret_x, bul_y, 3, 0);
+				PlaySoundObject((level == 3) ? 49 : 32, SOUND_MODE_PLAY);
+
+				// Handle multi-bullet patterns
+				if (shot_count == 1)
+				{
+					SetBullet(bul_no, bul_x, bul_y, shot_dir);
+				}
+				else if (shot_count == 2)
+				{
+					// Double spread
+					if (!gMC.up && !gMC.down)
+					{
+						SetBullet(bul_no, bul_x, bul_y - 0x600, shot_dir);
+						SetBullet(bul_no, bul_x, bul_y + 0x400, shot_dir);
+					}
+					else
+					{
+						SetBullet(bul_no, bul_x - 0x400, bul_y, shot_dir);
+						SetBullet(bul_no, bul_x + 0x400, bul_y, shot_dir);
+					}
+				}
+				else if (shot_count == 3)
+				{
+					// Triple spread
+					if (!gMC.up && !gMC.down)
+					{
+						SetBullet(bul_no, bul_x, bul_y - 0xF00, shot_dir);
+						SetBullet(bul_no, bul_x, bul_y, shot_dir);
+						SetBullet(bul_no, bul_x, bul_y + 0x1400, shot_dir); // Decompilation math simplification
+					}
+					else
+					{
+						SetBullet(bul_no, bul_x - 0xA00, bul_y, shot_dir);
+						SetBullet(bul_no, bul_x, bul_y, shot_dir);
+						SetBullet(bul_no, bul_x + 0xA00, bul_y, shot_dir);
+					}
+				}
 			}
 		}
 	}

@@ -409,183 +409,150 @@ int JudgeHitMyCharVectDown(int x, int y)
 
 void HitMyCharMap(void)
 {
-	int x, y;
-	int i;
-	unsigned char atrb[4];
+    // Floor division matching ASM arithmetic shift
+    int px = gMC.x;
+    int py = gMC.y;
+    int tx = ((px + (px >> 31 & 0xf)) >> 4);
+    tx = (tx + (tx >> 31 & 0x1ff)) >> 9;
+    int ty = ((py + (py >> 31 & 0xf)) >> 4);
+    ty = (ty + (ty >> 31 & 0x1ff)) >> 9;
 
-	x = gMC.x / 0x10 / 0x200;
-	y = gMC.y / 0x10 / 0x200;
+    int offx[4] = {0, 1, 0, 1};
+    int offy[4] = {0, 0, 1, 1};
 
-	int offx[4];
-	int offy[4];
+    for (int i = 0; i < 4; ++i)
+    {
+        int cx = tx + offx[i];
+        int cy = ty + offy[i];
+        uint8_t atrb = (uint8_t)GetAttribute(cx, cy);
 
-	offx[0] = 0;
-	offx[1] = 1;
-	offx[2] = 0;
-	offx[3] = 1;
+        switch (atrb)
+        {
+            case 0x02:
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
 
-	offy[0] = 0;
-	offy[1] = 0;
-	offy[2] = 1;
-	offy[3] = 1;
+            case 0x05: case 0x06: case 0x07: case 0x08: case 0x09:
+            case 0x0a: case 0x18:
+            case 0x41: case 0x43: case 0x46: case 0x47: case 0x48:
+            case 0x49: case 0x4a: case 0x4b: case 0x4c: case 0x4d:
+            case 0x4e: case 0x4f:
+            case 0x59: case 0x5a: case 0x5b: case 0x5c: case 0x5d:
+            case 0x5e: case 0x5f:
+                gMC.flag |= JudgeHitMyCharBlock(cx, cy);
+                break;
 
-	for (i = 0; i < 4; ++i)
-	{
-		atrb[i] = GetAttribute(x + offx[i], y + offy[i]);
+            case 0x10: case 0x50:
+                gMC.flag |= JudgeHitMyCharTriangleA(cx, cy);
+                break;
+            case 0x11: case 0x51:
+                gMC.flag |= JudgeHitMyCharTriangleB(cx, cy);
+                break;
+            case 0x12: case 0x52:
+                gMC.flag |= JudgeHitMyCharTriangleC(cx, cy);
+                break;
+            case 0x13: case 0x53:
+                gMC.flag |= JudgeHitMyCharTriangleD(cx, cy);
+                break;
+            case 0x14: case 0x54:
+                gMC.flag |= JudgeHitMyCharTriangleE(cx, cy);
+                break;
+            case 0x15: case 0x55:
+                gMC.flag |= JudgeHitMyCharTriangleF(cx, cy);
+                break;
+            case 0x16: case 0x56:
+                gMC.flag |= JudgeHitMyCharTriangleG(cx, cy);
+                break;
+            case 0x17: case 0x57:
+                gMC.flag |= JudgeHitMyCharTriangleH(cx, cy);
+                break;
 
-		switch (atrb[i])
-		{
-			// Block
-			case 0x05:
-			case 0x41:
-			case 0x43:
-			case 0x46:
-				gMC.flag |= JudgeHitMyCharBlock(x + offx[i], y + offy[i]);
-				break;
+            case 0x19: case 0x42:
+                gMC.flag |= JudgeHitMyCharDamage(cx, cy);
+                break;
 
-			// Slopes
-			case 0x50:
-				gMC.flag |= JudgeHitMyCharTriangleA(x + offx[i], y + offy[i]);
-				break;
+            case 0x60:
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x61:
+                gMC.flag |= JudgeHitMyCharBlock(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x62:
+                gMC.flag |= JudgeHitMyCharDamageW(cx, cy);
+                break;
 
-			case 0x51:
-				gMC.flag |= JudgeHitMyCharTriangleB(x + offx[i], y + offy[i]);
-				break;
+            case 0x70:
+                gMC.flag |= JudgeHitMyCharTriangleA(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x71:
+                gMC.flag |= JudgeHitMyCharTriangleB(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x72:
+                gMC.flag |= JudgeHitMyCharTriangleC(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x73:
+                gMC.flag |= JudgeHitMyCharTriangleD(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x74:
+                gMC.flag |= JudgeHitMyCharTriangleE(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x75:
+                gMC.flag |= JudgeHitMyCharTriangleF(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x76:
+                gMC.flag |= JudgeHitMyCharTriangleG(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0x77:
+                gMC.flag |= JudgeHitMyCharTriangleH(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
 
-			case 0x52:
-				gMC.flag |= JudgeHitMyCharTriangleC(x + offx[i], y + offy[i]);
-				break;
+            case 0x80:
+                gMC.flag |= JudgeHitMyCharVectLeft(cx, cy);
+                break;
+            case 0x81:
+                gMC.flag |= JudgeHitMyCharVectUp(cx, cy);
+                break;
+            case 0x82:
+                gMC.flag |= JudgeHitMyCharVectRight(cx, cy);
+                break;
+            case 0x83:
+                gMC.flag |= JudgeHitMyCharVectDown(cx, cy);
+                break;
 
-			case 0x53:
-				gMC.flag |= JudgeHitMyCharTriangleD(x + offx[i], y + offy[i]);
-				break;
+            case 0xa0:
+                gMC.flag |= JudgeHitMyCharVectLeft(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0xa1:
+                gMC.flag |= JudgeHitMyCharVectUp(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0xa2:
+                gMC.flag |= JudgeHitMyCharVectRight(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
+            case 0xa3:
+                gMC.flag |= JudgeHitMyCharVectDown(cx, cy);
+                gMC.flag |= JudgeHitMyCharWater(cx, cy);
+                break;
 
-			case 0x54:
-				gMC.flag |= JudgeHitMyCharTriangleE(x + offx[i], y + offy[i]);
-				break;
+            default:
+                break;
+        }
+    }
 
-			case 0x55:
-				gMC.flag |= JudgeHitMyCharTriangleF(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x56:
-				gMC.flag |= JudgeHitMyCharTriangleG(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x57:
-				gMC.flag |= JudgeHitMyCharTriangleH(x + offx[i], y + offy[i]);
-				break;
-
-			// Spikes
-			case 0x42:
-				gMC.flag |= JudgeHitMyCharDamage(x + offx[i], y + offy[i]);
-				break;
-
-			// Water spikes
-			case 0x62:
-				gMC.flag |= JudgeHitMyCharDamageW(x + offx[i], y + offy[i]);
-				break;
-
-			// Wind
-			case 0x80:
-				gMC.flag |= JudgeHitMyCharVectLeft(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x81:
-				gMC.flag |= JudgeHitMyCharVectUp(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x82:
-				gMC.flag |= JudgeHitMyCharVectRight(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x83:
-				gMC.flag |= JudgeHitMyCharVectDown(x + offx[i], y + offy[i]);
-				break;
-
-			// Water
-			case 0x02:
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			// Water and water blocks (same as the previous case)
-			case 0x60:
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x61:
-				gMC.flag |= JudgeHitMyCharBlock(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			// Water slopes
-			case 0x70:
-				gMC.flag |= JudgeHitMyCharTriangleA(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x71:
-				gMC.flag |= JudgeHitMyCharTriangleB(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x72:
-				gMC.flag |= JudgeHitMyCharTriangleC(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x73:
-				gMC.flag |= JudgeHitMyCharTriangleD(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x74:
-				gMC.flag |= JudgeHitMyCharTriangleE(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x75:
-				gMC.flag |= JudgeHitMyCharTriangleF(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x76:
-				gMC.flag |= JudgeHitMyCharTriangleG(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0x77:
-				gMC.flag |= JudgeHitMyCharTriangleH(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			// Water current
-			case 0xA0:
-				gMC.flag |= JudgeHitMyCharVectLeft(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0xA1:
-				gMC.flag |= JudgeHitMyCharVectUp(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0xA2:
-				gMC.flag |= JudgeHitMyCharVectRight(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-
-			case 0xA3:
-				gMC.flag |= JudgeHitMyCharVectDown(x + offx[i], y + offy[i]);
-				gMC.flag |= JudgeHitMyCharWater(x + offx[i], y + offy[i]);
-				break;
-		}
-	}
-
-	if (gMC.y > gWaterY + (4 * 0x200))
-		gMC.flag |= 0x100;
+    if (gMC.y > gWaterY + 0x800)
+        gMC.flag |= 0x100;
 }
-
 int JudgeHitMyCharNPC(NPCHAR *npc)
 {
 	int hit = 0;

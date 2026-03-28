@@ -173,45 +173,165 @@ void ActNpc302(NPCHAR *npc)
 }
 
 // Curly's machine gun
-void ActNpc303(NPCHAR *npc)
-{
-	RECT rcLeft[2] = {
-		{216, 152, 232, 168},
-		{232, 152, 248, 168},
-	};
 
-	RECT rcRight[2] = {
-		{216, 168, 232, 184},
-		{232, 168, 248, 184},
-	};
+// The mod injects a custom collision function at 0x00462dd0
+// It strictly checks if the player's bottom bounds are resting on this NPC's top bounds.
 
-	if (npc->pNpc == NULL)
-		return;
+BOOL CheckPlayerOnTop(NPCHAR *npc) {
+    // Calculate the Player's left, right, and bottom edges
+    // In CSE2, 'front' is the left extent, 'back' is the right extent
+    int player_left   = gMC.x - gMC.hit.front;  
+    int player_right  = gMC.x + gMC.hit.back;
+    int player_bottom = gMC.y + gMC.hit.bottom;
 
-	// Set position
-	if (npc->pNpc->direct == 0)
-	{
-		npc->direct = 0;
-		npc->x = npc->pNpc->x - (8 * 0x200);
-	}
-	else
-	{
-		npc->direct = 2;
-		npc->x = npc->pNpc->x + (8 * 0x200);
-	}
+    // Calculate the NPC's left, right, and top edges
+    int npc_left  = npc->x - npc->hit.front;    
+    int npc_right = npc->x + npc->hit.back;     
+    int npc_top   = npc->y - npc->hit.top;      
 
-	npc->y = npc->pNpc->y;
+    // Condition 1 & 2: Horizontal strict overlap
+    // The player must be entirely within the block's width, minus a 3-pixel margin on the edges.
+    // This prevents the block from crumbling if Quote just brushes against the side of it.
+    if (player_left < (npc_right - 0x600) && 
+        npc_left < (player_right + 0x600)) {
+        
+        // Condition 3 & 4: Vertical surface detection
+        // The player's feet must be below the top edge of the block...
+        if (npc_top < player_bottom) {
+            
+            // ...but the player's feet cannot be lower than the vertical center of the block + 3 pixels.
+            // This ensures Quote is actually resting on top of the block and not hitting it from below.
+            if (player_bottom < (npc->y + 0x600)) {
+                return TRUE; // Player is standing perfectly on top!
+            }
+        }
+    }
+    
+    return FALSE; // Player is not standing on the block
+}
 
-	// Animation
-	npc->ani_no = 0;
-	if (npc->pNpc->ani_no == 3 || npc->pNpc->ani_no == 5)
-		npc->y -= 1 * 0x200;
 
-	// Set framerect
-	if (npc->direct == 0)
-		npc->rect = rcLeft[npc->ani_no];
-	else
-		npc->rect = rcRight[npc->ani_no];
+void ActNpc303(NPCHAR *npc) {
+    int sheetX, sheetY;
+
+    switch (npc->act_no) {
+        case 0: // Initialization
+            // If the 0x1000 bit is missing, it sets up the block as a "cracked" block immediately
+            if (!(npc->bits & 0x1000)) { 
+                npc->surf = (SurfaceID)12; // 0x0C surface type (destructible block)
+                npc->act_no = 2;
+                npc->ani_no = 1;
+            } else {
+                npc->surf = (SurfaceID)2; // 0x02 surface type
+                
+                // Dynamically calculate the sprite rect based on code_event
+                // 0 is top-left, 1 is next to it, etc.
+                sheetX = (npc->code_event % 16) * 16;
+                sheetY = (npc->code_event / 16) * 16;
+                
+                npc->rect.left   = sheetX;
+                npc->rect.top    = sheetY;
+                npc->rect.right  = sheetX + 16;
+                npc->rect.bottom = sheetY + 16;
+                
+                npc->act_no = 1;
+                npc->ani_no = 0;
+            }
+            
+            // 0x400 flag determines how fast the block crumbles
+            if (!(npc->bits & 0x400)) {
+                npc->count2 = 4;
+            } else {
+                npc->count2 = 1;
+            }
+            
+            // Clear specific bits and set SOLID (0x04) + SHOOTABLE (0x40) -> 0x44
+            npc->bits = (npc->bits & 0xFFFF9CDE) | 0x44;
+            break;
+
+        case 1: // Idle - Waiting for interaction
+            // Check if hit by bullet (variable at offset 0x9c is 'shock')
+            if (npc->shock != 0) {
+                npc->surf = (SurfaceID)12;
+                npc->ani_no = 1;
+                npc->act_no = 2;
+                npc->bits &= ~0x20; // Clear interaction bit
+            }
+            // Intentionally fall through to Case 2!
+            
+        case 2: // Stepped on check / Shaking state
+            if (CheckPlayerOnTop(npc)) {
+                npc->surf = (SurfaceID)12;
+                npc->ani_no = 2;
+                npc->act_no = 3;
+                
+                npc->count1 = npc->count2; // Set frame delay for crumble
+                npc->act_wait = 5;         // Set total crumble ticks
+                
+                PlaySoundObject(58, SOUND_MODE_PLAY);    // SND_BLOCK_DESTROY (0x3A)
+                
+                // Spawn Debris (NPC 4 is the small smoke puff/debris)
+                SetNpChar(4, npc->x, npc->y, 0, 0, 0, NULL, 0x100);
+            }
+            break;
+
+        case 3: // Crumbling sequence
+            npc->count1--;
+            if (npc->count1 < 1) {
+                npc->ani_no++;
+                npc->act_wait--;
+                
+                // If animation has progressed far enough to drop the player
+                if (npc->act_wait < 4) {
+                    npc->bits &= ~0x44; // Remove SOLID and SHOOTABLE bits (block disappears)
+                    
+                    // If fully destroyed
+                    if (npc->act_wait < 1) {
+                        npc->act_no = 4;
+                        npc->ani_no = 6;
+                        
+                        // If code_flag is 0, destroy the block permanently
+                        if (npc->code_flag < 1) {
+                            npc->cond = 0; 
+                        } else {
+                            // Otherwise, use code_flag as a respawn timer!
+                            npc->ani_wait = npc->code_flag;
+                        }
+                    } else {
+                        npc->count1 = npc->count2;
+                    }
+                } else {
+                    npc->count1 = npc->count2;
+                }
+            }
+            break;
+
+        case 4: // Destroyed / Respawning wait
+            npc->ani_wait--;
+            if (npc->ani_wait < 1) {
+                npc->act_no = 5;
+            }
+            break;
+
+        case 5: // Re-forming animation
+            npc->ani_no++;
+            if (npc->ani_no > 9) {
+                npc->bits |= 0x44; // Restore SOLID and SHOOTABLE bits
+                npc->act_no = 2;
+                npc->ani_no = 1;
+            }
+            break;
+    }
+
+    // Apply shaking and crumbling sprites
+    // The frames are lined up on the spritesheet starting at X:0xB0, Y:0x10
+    if (npc->ani_no != 0) {
+        int offset = (npc->ani_no - 1) * 16;
+        npc->rect.left   = offset + 0xB0;
+        npc->rect.right  = offset + 0xC0;
+        npc->rect.top    = 0x10;
+        npc->rect.bottom = 0x20;
+    }
 }
 
 // Gaudi in hospital
