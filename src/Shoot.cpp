@@ -350,232 +350,137 @@ void ShootBullet_Machinegun1(int level)
 	}
 }
 
-void ShootBullet_Missile(int level, BOOL bSuper)
+// Helper to count active bullets of a specific type (Custom Engine Function)
+int CountBulletsByID(int id)
+{
+	int count = 0;
+	for (int i = 0; i < 64; ++i)
+	{
+		// Check if bullet is active (bit 7 of cond) and matches ID
+		if ((gBul[i].cond & 0x80) && gBul[i].code_bullet == id)
+			count++;
+	}
+	return count;
+}
+
+// Helper to get current ammo of the selected weapon
+int GetSelectedWeaponAmmo()
+{
+	return gArmsData[gSelectedArms].num;
+}
+
+int gEmptySoundTimer = 0;
+#include "Game.h"
+void ShootBullet_Missile(int level, bool bSuper)
 {
 	int bul_no;
+	int ammo_cost;
+	int max_bullets = level * 2;
 
-	if (bSuper)
-	{
-		switch (level)
-		{
-			case 1:
-				bul_no = 28;
-				break;
-
-			case 2:
-				bul_no = 29;
-				break;
-
-			case 3:
-				bul_no = 30;
-				break;
-		}
-
-		switch (level)
-		{
-			case 1:
-				if (CountArmsBullet(10) > 0)
-					return;
-
-				if (CountArmsBullet(11) > 0)
-					return;
-
-				break;
-
-			case 2:
-				if (CountArmsBullet(10) > 1)
-					return;
-
-				if (CountArmsBullet(11) > 1)
-					return;
-
-				break;
-
-			case 3:
-				if (CountArmsBullet(10) > 3)
-					return;
-
-				if (CountArmsBullet(11) > 3)
-					return;
-
-				break;
-		}
-
-	}
+	// Determine base bullet type based on game flags
+	if (GetNPCFlag(0xCA))
+		bul_no = 13; // Missile
 	else
+		bul_no = 15; // Fireball/Custom
+
+	// Bullet screen limit check
+	if (CountBulletsByID(bul_no) < max_bullets)
 	{
-		switch (level)
+		// Handle firing modes
+		if (GetNPCFlag(0xCB) && (gKeyTrg & gKeyMap))
 		{
-			case 1:
-				bul_no = 13;
-				break;
-
-			case 2:
-				bul_no = 14;
-				break;
-
-			case 3:
-				bul_no = 15;
-				break;
+			// Special Alt-Fire Mode (Map button)
+			bul_no = 14;
+			ammo_cost = 5;
 		}
-
-		switch (level)
+		else
 		{
-			case 1:
-				if (CountArmsBullet(5) > 0)
-					return;
-
-				if (CountArmsBullet(6) > 0)
-					return;
-
-				break;
-
-			case 2:
-				if (CountArmsBullet(5) > 1)
-					return;
-
-				if (CountArmsBullet(6) > 1)
-					return;
-
-				break;
-
-			case 3:
-				if (CountArmsBullet(5) > 3)
-					return;
-
-				if (CountArmsBullet(6) > 3)
-					return;
-
-				break;
-		}
-	}
-
-	if (gKeyTrg & gKeyShot)
-	{
-		if (level < 3)
-		{
-			if (!UseArmsEnergy(1))
-			{
-				PlaySoundObject(37, SOUND_MODE_PLAY);
-
-				if (empty == 0)
-				{
-					SetCaret(gMC.x, gMC.y, 16, 0);
-					empty = 50;
-				}
-
+			// Standard Fire Mode
+			ammo_cost = 1;
+			if (!(gKeyTrg & gKeyShot))
 				return;
-			}
+		}
 
-			if (gMC.up)
+		// Ammo Check
+		if (GetSelectedWeaponAmmo() < ammo_cost)
+		{
+			if (gEmptySoundTimer == 0)
 			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x - (1 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x + (1 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-				}
-			}
-			else if (gMC.down)
-			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x - (1 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x + (1 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-				}
-			}
-			else
-			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (6 * 0x200), gMC.y, 0);
-					SetCaret(gMC.x - (12 * 0x200), gMC.y, 3, 0);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (6 * 0x200), gMC.y, 2);
-					SetCaret(gMC.x + (12 * 0x200), gMC.y, 3, 0);
-				}
+				PlaySoundObject(37, SOUND_MODE_PLAY); // "Empty" click
+				SetCaret(gMC.x, gMC.y, 16, 0);        // "Empty" icon
+				gEmptySoundTimer = 25;                // Prevent sound spam
 			}
 		}
 		else
 		{
-			if (!UseArmsEnergy(1))
-			{
-				PlaySoundObject(37, SOUND_MODE_PLAY);
+			// Fire the weapon
+			UseArmsEnergy(ammo_cost);
 
-				if (empty == 0)
-				{
-					SetCaret(gMC.x, gMC.y, 16, 0);
-					empty = 50;
-				}
+			int bul_x, bul_y, caret_x;
+			int shot_dir = gMC.direct;
 
-				return;
-			}
-
+			// Position calculation
 			if (gMC.up)
 			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x - (1 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y, 1);
-					SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y, 1);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y - (8 * 0x200), 1);
-					SetCaret(gMC.x + (1 * 0x200), gMC.y - (8 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y, 1);
-					SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y, 1);
-				}
+				shot_dir = 1;
+				bul_x = (gMC.direct == 0) ? (gMC.x - 0x600) : (gMC.x + 0x600);
+				bul_y = gMC.y - 0x1200;
+				caret_x = bul_x;
 			}
 			else if (gMC.down)
 			{
-				if (gMC.direct == 0)
-				{
-					SetBullet(bul_no, gMC.x - (1 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x - (1 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y, 3);
-					SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y, 3);
-				}
-				else
-				{
-					SetBullet(bul_no, gMC.x + (1 * 0x200), gMC.y + (8 * 0x200), 3);
-					SetCaret(gMC.x + (1 * 0x200), gMC.y + (8 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x - (3 * 0x200), gMC.y, 3);
-					SetBullet(bul_no, gMC.x + (3 * 0x200), gMC.y, 3);
-				}
+				shot_dir = 3;
+				bul_x = (gMC.direct == 0) ? (gMC.x - 0x600) : (gMC.x + 0x600);
+				bul_y = gMC.y + 0x1200;
+				caret_x = bul_x;
 			}
 			else
 			{
+				bul_y = gMC.y + 0x800;
 				if (gMC.direct == 0)
 				{
-					SetBullet(bul_no, gMC.x - (6 * 0x200), gMC.y + (1 * 0x200), 0);
-					SetCaret(gMC.x - (12 * 0x200), gMC.y + (1 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x, gMC.y - (8 * 0x200), 0);
-					SetBullet(bul_no, gMC.x + (4 * 0x200), gMC.y - (1 * 0x200), 0);
+					bul_x = gMC.x - 0xD00;
+					caret_x = gMC.x - 0x1A00; // Flash spawns further out
 				}
 				else
 				{
-					SetBullet(bul_no, gMC.x + (6 * 0x200), gMC.y + (1 * 0x200), 2);
-					SetCaret(gMC.x + (12 * 0x200), gMC.y + (1 * 0x200), 3, 0);
-					SetBullet(bul_no, gMC.x, gMC.y - (8 * 0x200), 2);
-					SetBullet(bul_no, gMC.x - (4 * 0x200), gMC.y - (1 * 0x200), 2);
+					bul_x = gMC.x + 0xD00;
+					caret_x = gMC.x + 0x1A00;
+				}
+			}
+
+			SetCaret(caret_x, bul_y, 3, 0); // Muzzle flash
+			
+			// Select sound based on bullet type
+			if (bul_no == 15)
+				PlaySoundObject(33, SOUND_MODE_PLAY);
+			else
+				PlaySoundObject(32, SOUND_MODE_PLAY);
+
+			// Handle Bullet 17 (Special behavior) or standard with spread
+			if (bul_no == 17)
+			{
+				SetBullet(17, bul_x, bul_y, shot_dir);
+			}
+			else
+			{
+				int spread_x = 0;
+				int spread_y = 0;
+
+				if (!gMC.up && !gMC.down)
+				{
+					// Horizontal fire: slight vertical randomization
+					spread_y = Random(0x100, 0x400); 
+					SetBullet(bul_no, bul_x, bul_y - spread_y, shot_dir);
+				}
+				else
+				{
+					// Vertical fire: slight horizontal randomization
+					spread_x = Random(-0x200, 0x200);
+					SetBullet(bul_no, bul_x + spread_x, bul_y, shot_dir);
 				}
 			}
 		}
-
-		PlaySoundObject(32, SOUND_MODE_PLAY);
 	}
 }
 

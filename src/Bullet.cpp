@@ -1132,12 +1132,13 @@ void ActBullet_FireBall(BULLET *bul, int level)
 	}
 }
 
+#include "Frame.h"
+
 void ActBullet_Missile(BULLET *bul, int level)
 {
-	BOOL bHit;
+	bool bHit = false;
 
-	static unsigned int inc;
-
+	// Update lifespan counter
 	if (++bul->count1 > bul->life_count)
 	{
 		bul->cond = 0;
@@ -1145,250 +1146,208 @@ void ActBullet_Missile(BULLET *bul, int level)
 		return;
 	}
 
-	bHit = FALSE;
+	// MOD: Explosion Trigger Logic
+	// Explode if the 'life' timer (offset 0x5C) is below 90 (0x5A)
+	if (bul->life < 90)
+		bHit = true;
 
-	if (bul->life != 10)
-		bHit = TRUE;
-	if (bul->direct == 0 && bul->flag & 1)
-		bHit = TRUE;
-	if (bul->direct == 2 && bul->flag & 4)
-		bHit = TRUE;
-	if (bul->direct == 1 && bul->flag & 2)
-		bHit = TRUE;
-	if (bul->direct == 3 && bul->flag & 8)
-		bHit = TRUE;
-	if (bul->direct == 0 && bul->flag & 0x80)
-		bHit = TRUE;
-	if (bul->direct == 0 && bul->flag & 0x20)
-		bHit = TRUE;
-	if (bul->direct == 2 && bul->flag & 0x40)
-		bHit = TRUE;
-	if (bul->direct == 2 && bul->flag & 0x10)
-		bHit = TRUE;
+	// Explode on wall collision (Standard Flags)
+	if (bul->direct == 0 && (bul->flag & 0x01)) bHit = true; // Left
+	if (bul->direct == 1 && (bul->flag & 0x02)) bHit = true; // Up
+	if (bul->direct == 2 && (bul->flag & 0x04)) bHit = true; // Right
+	if (bul->direct == 3 && (bul->flag & 0x08)) bHit = true; // Down
+
+	// MOD: Explode on special collision flags (NPCs or custom tiles)
+	if (bul->direct == 0 && (bul->flag & 0x80)) bHit = true;
+	if (bul->direct == 0 && (bul->flag & 0x20)) bHit = true;
+	if (bul->direct == 2 && (bul->flag & 0x40)) bHit = true;
+	if (bul->direct == 2 && (bul->flag & 0x10)) bHit = true;
 
 	if (bHit)
 	{
+		// Spawn the appropriate explosion (Bullet IDs 16, 17, or 18)
 		SetBullet(level + 15, bul->x, bul->y, 0);
 		bul->cond = 0;
+		return; // Exit immediately on explosion
 	}
 
-	switch (bul->act_no)
+	// Action 0: Initialization
+	if (bul->act_no == 0)
 	{
-		case 0:
-			bul->act_no = 1;
+		bul->act_no = 1;
 
-			switch (bul->direct)
-			{
-				case 0:
-				case 2:
-					bul->tgt_y = bul->y;
-					break;
-				case 1:
-				case 3:
-					bul->tgt_x = bul->x;
-					break;
-			}
-
-			if (level == 3)
-			{
-				switch (bul->direct)
-				{
-					case 0:
-					case 2:
-						if (bul->y > gMC.y)
-							bul->ym = 0x100;
-						else
-							bul->ym = -0x100;
-
-						bul->xm = Random(-0x200, 0x200);
-						break;
-
-					case 1:
-					case 3:
-						if (bul->x > gMC.x)
-							bul->xm = 0x100;
-						else
-							bul->xm = -0x100;
-
-						bul->ym = Random(-0x200, 0x200);
-						break;
-				}
-
-				switch (++inc % 3)
-				{
-					case 0:
-						bul->ani_no = 0x80;
-						break;
-					case 1:
-						bul->ani_no = 0x40;
-						break;
-					case 2:
-						bul->ani_no = 0x33;
-						break;
-				}
-			}
-			else
-			{
-				bul->ani_no = 0x80;
-			}
-			// Fallthrough
-		case 1:
-			switch (bul->direct)
-			{
-				case 0:
-					bul->xm += -bul->ani_no;
-					break;
-				case 1:
-					bul->ym += -bul->ani_no;
-					break;
-				case 2:
-					bul->xm += bul->ani_no;
-					break;
-				case 3:
-					bul->ym += bul->ani_no;
-					break;
-			}
-
-			if (level == 3)
-			{
-				switch (bul->direct)
-				{
-					case 0:
-					case 2:
-						if (bul->y < bul->tgt_y)
-							bul->ym += 0x20;
-						else
-							bul->ym -= 0x20;
-
-						break;
-
-					case 1:
-					case 3:
-						if (bul->x < bul->tgt_x)
-							bul->xm += 0x20;
-						else
-							bul->xm -= 0x20;
-						break;
-				}
-			}
-
-			if (bul->xm < -0xA00)
-				bul->xm = -0xA00;
-			if (bul->xm > 0xA00)
-				bul->xm = 0xA00;
-
-			if (bul->ym < -0xA00)
-				bul->ym = -0xA00;
-			if (bul->ym > 0xA00)
-				bul->ym = 0xA00;
-
-			bul->x += bul->xm;
-			bul->y += bul->ym;
-
-			break;
-	}
-
-	if (++bul->count2 > 2)
-	{
-		bul->count2 = 0;
-
+		// Store initial axis to calculate the "swerve" or "wobble"
 		switch (bul->direct)
 		{
 			case 0:
-				SetCaret(bul->x + (8 * 0x200), bul->y, 7, 2);
+			case 2:
+				bul->tgt_y = bul->y;
 				break;
 			case 1:
-				SetCaret(bul->x, bul->y + (8 * 0x200), 7, 3);
-				break;
-			case 2:
-				SetCaret(bul->x - (8 * 0x200), bul->y, 7, 0);
-				break;
 			case 3:
-				SetCaret(bul->x, bul->y - (8 * 0x200), 7, 1);
+				bul->tgt_x = bul->x;
 				break;
+		}
+
+		if (level == 3)
+		{
+			// Level 3 unique movement patterns
+			switch (bul->direct)
+			{
+				case 0: // Left
+				case 2: // Right
+					bul->ym = (gMC.y < bul->y) ? 0x100 : -0x100;
+					bul->xm = Random(-0x400, 0x400);
+					break;
+				case 1: // Up
+				case 3: // Down
+					bul->xm = (gMC.x < bul->x) ? 0x120 : -0x120;
+					bul->ym = Random(-0x150, 0x500);
+					break;
+			}
+
+			// MOD: Acceleration variability
+			// Uses a global counter (0x49BC9C) to determine this specific missile's "weight"
+			static int gMissileSwerveCycle = 0;
+			gMissileSwerveCycle++;
+			
+			int cycle = gMissileSwerveCycle % 3;
+			if (cycle == 0)      bul->count2 = 0x80; // Fast acceleration
+			else if (cycle == 1) bul->count2 = 0x40; // Medium acceleration
+			else                 bul->count2 = 0x33; // Slow/Heavy acceleration
+		}
+		else
+		{
+			bul->count2 = 0x80; // Standard acceleration for Lv1 and Lv2
+		}
+	}
+	else if (bul->act_no == 1)
+	{
+		// Apply thrust based on acceleration value (stored in count2)
+		switch (bul->direct)
+		{
+			case 0: bul->xm -= bul->count2; break;
+			case 1: bul->ym -= bul->count2; break;
+			case 2: bul->xm += bul->count2; break;
+			case 3: bul->ym += bul->count2; break;
+		}
+
+		// Level 3 Steering logic (Steer back toward the original axis)
+		if (level == 3)
+		{
+			if (bul->direct == 0 || bul->direct == 2)
+			{
+				if (bul->y < bul->tgt_y) bul->ym += 0x15;
+				else                     bul->ym -= 0x15;
+			}
+			else
+			{
+				if (bul->x < bul->tgt_x) bul->xm += 0x15;
+				else                     bul->xm -= 0x15;
+			}
+		}
+
+		// Apply speed caps (8.0 pixels per frame)
+		if (bul->xm < -0x1000) bul->xm = -0x1000;
+		if (bul->xm >  0x1000) bul->xm =  0x1000;
+		if (bul->ym < -0x1000) bul->ym = -0x1000;
+		if (bul->ym >  0x1000) bul->ym =  0x1000;
+
+		// Update position
+		bul->x += bul->xm;
+		bul->y += bul->ym;
+	}
+
+	// Smoke Trail: Generate a caret every 3 frames
+	if (++bul->ani_wait > 2)
+	{
+		bul->ani_wait = 0;
+		switch (bul->direct)
+		{
+			case 0: SetCaret(bul->x + 0x1000, bul->y, 7, 2); break;
+			case 1: SetCaret(bul->x, bul->y + 0x1000, 7, 3); break;
+			case 2: SetCaret(bul->x - 0x1000, bul->y, 7, 0); break;
+			case 3: SetCaret(bul->x, bul->y - 0x1000, 7, 1); break;
 		}
 	}
 
-	RECT rect1[4] = {
-		{0, 0, 16, 16},
-		{16, 0, 32, 16},
-		{32, 0, 48, 16},
-		{48, 0, 64, 16},
+	// Animation Frames (RECT definitions)
+	static const RECT rect_lv1[4] = {
+		{0, 0, 16, 16}, {16, 0, 32, 16}, {32, 0, 48, 16}, {48, 0, 64, 16}
+	};
+	static const RECT rect_lv2[4] = {
+		{0, 16, 16, 32}, {16, 16, 32, 32}, {32, 16, 48, 32}, {48, 16, 64, 32}
+	};
+	static const RECT rect_lv3[4] = {
+		{0, 32, 16, 48}, {16, 32, 32, 48}, {32, 32, 48, 48}, {48, 32, 64, 48}
 	};
 
-	RECT rect2[4] = {
-		{0, 16, 16, 32},
-		{16, 16, 32, 32},
-		{32, 16, 48, 32},
-		{48, 16, 64, 32},
-	};
-
-	RECT rect3[4] = {
-		{0, 32, 16, 48},
-		{16, 32, 32, 48},
-		{32, 32, 48, 48},
-		{48, 32, 64, 48},
-	};
-
-	switch (level)
-	{
-		case 1:
-			bul->rect = rect1[bul->direct];
-			break;
-		case 2:
-			bul->rect = rect2[bul->direct];
-			break;
-		case 3:
-			bul->rect = rect3[bul->direct];
-			break;
-	}
+	// Set frame based on level and direction
+	if (level == 1)      bul->rect = rect_lv1[bul->direct];
+	else if (level == 2) bul->rect = rect_lv2[bul->direct];
+	else if (level == 3) bul->rect = rect_lv3[bul->direct];
 }
 
 void ActBullet_Bom(BULLET *bul, int level)
 {
-	switch (bul->act_no)
+	// Initialization
+	if (bul->act_no == 0)
 	{
-		case 0:
-			bul->act_no = 1;
+		bul->act_no = 1;
 
-			switch (level)
-			{
-				case 1:
-					bul->act_wait = 10;
-					break;
-				case 2:
-					bul->act_wait = 15;
-					break;
-				case 3:
-					bul->act_wait = 5;
-					break;
-			}
-
+		if (level == 1)
+		{
+			bul->count1 = 10;
 			PlaySoundObject(44, SOUND_MODE_PLAY);
-			// Fallthrough
-		case 1:
-			switch (level)
-			{
-				case 1:
-					if (bul->act_wait % 3 == 0)
-						SetDestroyNpCharUp(bul->x + (Random(-16, 16) * 0x200), bul->y + (Random(-16, 16) * 0x200), bul->enemyXL, 2);
-					break;
+		}
+		else if (level == 2)
+		{
+			bul->count1 = 10;
+			PlaySoundObject(35, SOUND_MODE_PLAY);
+			// MOD: Level 2 Missile explosions now cause screen quake
+			SetQuake(Random(14, 20)); 
+			PlaySoundObject(115, SOUND_MODE_PLAY);
+		}
+		else // Level 3
+		{
+			bul->count1 = 5;
+			PlaySoundObject(72, SOUND_MODE_PLAY);
+		}
+	}
 
-				case 2:
-					if (bul->act_wait % 3 == 0)
-						SetDestroyNpCharUp(bul->x + (Random(-32, 32) * 0x200), bul->y + (Random(-32, 32) * 0x200), bul->enemyXL, 2);
-					break;
+	// Spawn particle effects based on level density
+	if (level == 1)
+	{
+		if (bul->count1 % 3 == 0)
+		{
+			int off_x = Random(-16, 16) * 0x200;
+			int off_y = Random(-16, 16) * 0x200;
+			SetDestroyNpCharUp(bul->x + off_x, bul->y + off_y, bul->enemyXL, 5);
+		}
+	}
+	else if (level == 2)
+	{
+		if (bul->count1 % 2 == 0)
+		{
+			int off_x = Random(-32, 32) * 0x200;
+			int off_y = Random(-32, 32) * 0x200;
+			SetDestroyNpCharUp(bul->x + off_x, bul->y + off_y, bul->enemyXL, 10);
+		}
+	}
+	else if (level == 3)
+	{
+		if (bul->count1 % 4 == 0)
+		{
+			int off_x = Random(-5, 5) * 0x200;
+			int off_y = Random(-5, 5) * 0x200;
+			SetDestroyNpCharUp(bul->x + off_x, bul->y + off_y, bul->enemyXL, 2);
+		}
+	}
 
-				case 3:
-					if (bul->act_wait % 3 == 0)
-						SetDestroyNpCharUp(bul->x + (Random(-40, 40) * 0x200), bul->y + (Random(-40, 40) * 0x200), bul->enemyXL, 2);
-					break;
-			}
-
-			if (--bul->act_wait < 0)
-				bul->cond = 0;
-
-			break;
+	// Countdown and despawn
+	if (--bul->count1 < 0)
+	{
+		bul->cond = 0;
 	}
 }
 
