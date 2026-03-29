@@ -248,17 +248,23 @@ BOOL SetBulletObject(int x, int y, int val)
 
 		memset(tamakazu_ari, 0, sizeof(tamakazu_ari));
 
+		// Loop through player's 8 weapon slots
 		for (n = 0; n < 8; ++n)
 		{
+			// Check the weapon code (ID)
 			switch (gArmsData[n].code)
 			{
-				case 5:
+				case 5: // Missile Launcher
 					tamakazu_ari[t++] = 0;
 					break;
 
-				case 10:
+				// MOD: The case 10 (Super Missile) check has been NOP'd out!
+				// The compiler merged this branch into the default branch.
+				/*
+				case 10: // Super Missile Launcher
 					tamakazu_ari[t++] = 1;
 					break;
+				*/
 
 				default:
 					tamakazu_ari[t] = 0;
@@ -266,28 +272,33 @@ BOOL SetBulletObject(int x, int y, int val)
 			}
 		}
 
+		// If no missile launchers are found, don't spawn a pickup
 		if (t == 0)
 			return FALSE;
 
+		// Select a random drop
 		n = Random(1, 10 * t);
 		bullet_no = tamakazu_ari[n % t];
 
+		// Find an empty NPC slot (starts looking at index 256 / 0x100)
 		n = 0x100;
 		while (n < NPC_MAX && gNPC[n].cond)
 			++n;
 
+		// No empty slots available
 		if (n == NPC_MAX)
 			return FALSE;
 
+		// Initialize the missile drop NPC (ID 86)
 		memset(&gNPC[n], 0, sizeof(NPCHAR));
-		gNPC[n].cond |= 0x80;
+		gNPC[n].cond |= 0x80;            // Set "Alive" bit
 		gNPC[n].direct = 0;
-		gNPC[n].code_event = bullet_no;
-		gNPC[n].code_char = 86;
+		gNPC[n].code_event = bullet_no;  // 0 for Missile, (1 for Super Missile removed)
+		gNPC[n].code_char = 86;          // Missile Ammo Pickup
 		gNPC[n].x = x;
 		gNPC[n].y = y;
 		gNPC[n].bits = gNpcTable[gNPC[n].code_char].bits;
-		gNPC[n].exp = val;
+		gNPC[n].exp = val;               // Ammo amount
 		SetUniqueParameter(&gNPC[n]);
 	}
 

@@ -637,16 +637,17 @@ void ActNpc063(NPCHAR *npc)
 // First Cave Critter
 void ActNpc064(NPCHAR *npc)
 {
+	// MOD: Rects updated to 24x24 and shifted
 	RECT rcLeft[3] = {
-		{0, 0, 16, 16},
-		{16, 0, 32, 16},
-		{32, 0, 48, 16},
+		{144, 0, 168, 24},
+		{168, 0, 192, 24},
+		{192, 0, 216, 24},
 	};
 
 	RECT rcRight[3] = {
-		{0, 16, 16, 32},
-		{16, 16, 32, 32},
-		{32, 16, 48, 32},
+		{144, 24, 168, 48},
+		{168, 24, 192, 48},
+		{192, 24, 216, 48},
 	};
 
 	switch (npc->act_no)
@@ -698,15 +699,13 @@ void ActNpc064(NPCHAR *npc)
 		case 2: // Going to jump
 			if (++npc->act_wait > 8)
 			{
-				// Set jump state
 				npc->act_no = 3;
 				npc->ani_no = 2;
-
-				// Jump
 				npc->ym = -0x5FF;
-				PlaySoundObject(30, SOUND_MODE_PLAY);
+				
+				// MOD: Sound changed from 30 to 108
+				PlaySoundObject(108, SOUND_MODE_PLAY); 
 
-				// Jump in facing direction
 				if (npc->direct == 0)
 					npc->xm = -0x100;
 				else

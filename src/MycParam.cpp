@@ -195,23 +195,22 @@ void AddBulletMyChar(int no, int val)
 {
 	int a;
 
-	// Missile Launcher
+	// Loop to find Missile Launcher
 	a = 0;
 	while (a < ARMS_MAX && gArmsData[a].code != 5)
 		++a;
 
+	// MOD: The secondary check for Super Missiles (ID 10) was entirely NOP'd / removed
+	// The original `if (a == ARMS_MAX)` nested block is gone.
+
+	// If no Missile Launcher was found, abort
 	if (a == ARMS_MAX)
-	{
-		// Super Missile Launcher
-		a = 0;
-		while (a < ARMS_MAX && gArmsData[a].code != 10)
-			++a;
+		return;
 
-		if (a == ARMS_MAX)
-			return;
-	}
-
+	// Add ammo to the Missile Launcher
 	gArmsData[a].num += val;
+
+	// Clamp to max ammo
 	if (gArmsData[a].num > gArmsData[a].max_num)
 		gArmsData[a].num = gArmsData[a].max_num;
 }

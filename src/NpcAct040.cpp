@@ -426,16 +426,18 @@ void ActNpc043(NPCHAR *npc)
 void ActNpc044(NPCHAR *npc)
 {
 	// Yeah, Pixel defined these backwards for some reason.
+
+	// MOD: X coordinates shifted +176
 	RECT rcRight[3] = {
-		{0, 0, 32, 32},
-		{32, 0, 64, 32},
-		{64, 0, 96, 32},
+		{176, 0, 208, 32},
+		{208, 0, 240, 32},
+		{240, 0, 272, 32},
 	};
 
 	RECT rcLeft[3] = {
-		{0, 0, 32, 32},
-		{96, 0, 128, 32},
-		{128, 0, 160, 32},
+		{176, 0, 208, 32},
+		{272, 0, 304, 32},
+		{304, 0, 336, 32},
 	};
 
 	switch (npc->act_no)
@@ -609,10 +611,11 @@ void ActNpc044(NPCHAR *npc)
 // Baby
 void ActNpc045(NPCHAR *npc)
 {
+	// MOD: X coordinates shifted +176
 	RECT rect[3] = {
-		{0, 32, 16, 48},
-		{16, 32, 32, 48},
-		{32, 32, 48, 48},
+		{176, 32, 192, 48},
+		{192, 32, 208, 48},
+		{208, 32, 224, 48},
 	};
 
 	switch (npc->act_no)
@@ -751,7 +754,9 @@ void ActNpc047(NPCHAR *npc)
 			break;
 
 		case 3:
-			npc->bits |= NPC_SOLID_SOFT;
+			// MOD: npc->bits |= NPC_SOLID_SOFT (0x08) was changed to OR by 0x29
+			// 0x29 = 0x20 (Shootable) | 0x08 (Solid Soft) | 0x01 (Solid Hard)
+			npc->bits |= 0x29; 
 			npc->damage = 0;
 			++npc->act_wait;
 
@@ -816,10 +821,19 @@ void ActNpc048(NPCHAR *npc)
 	}
 	else if (npc->flag & 8)
 	{
+		// MOD: Instead of vanishing instantly, it detonates into a massive hitbox
 		if (++npc->count1 > 2 || npc->direct == 2)
 		{
+			npc->tgt_x = 0x2800;
+			npc->tgt_y = 0x2800;
+			npc->count1 = 0x2800;
+			npc->count2 = 0x2800;
+			npc->damage = 12; // High explosion damage
+			
+			PlaySoundObject(0x48, SOUND_MODE_PLAY); // Custom explosion sound
+			SetDestroyNpChar(npc->x, npc->y, npc->damage, 0x7F); // Massive break effect
 			VanishNpChar(npc);
-			SetCaret(npc->x, npc->y, 2, 0);
+			return;
 		}
 		else
 		{
@@ -1077,13 +1091,14 @@ void ActNpc050(NPCHAR *npc)
 	if (npc->ym < -0x5FF)
 		npc->ym = -0x5FF;
 
-	RECT rect[4] = {
-		{48, 32, 64, 48},
-		{64, 32, 80, 48},
-		{80, 32, 96, 48},
-		{96, 32, 112, 48},
-	};
 
+	// MOD: X shifted +0xB0 (176)
+	RECT rect[4] = {
+		{224, 32, 240, 48},
+		{240, 32, 256, 48},
+		{256, 32, 272, 48},
+		{272, 32, 288, 48},
+	};
 	if (npc->direct == 0)
 	{
 		if (++npc->ani_wait > 1)
@@ -1347,9 +1362,9 @@ void ActNpc053(NPCHAR *npc)
 void ActNpc054(NPCHAR *npc)
 {
 	RECT rcLeft[3] = {
-		{0, 80, 32, 104},
-		{32, 80, 64, 104},
-		{64, 80, 96, 104},
+		{96, 80, 128, 104},
+		{128, 80, 160, 104},
+		{160, 80, 192, 104},
 	};
 
 	RECT rcRight[3] = {

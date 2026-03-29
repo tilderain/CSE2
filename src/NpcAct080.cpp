@@ -18,43 +18,38 @@
 // Gravekeeper
 void ActNpc080(NPCHAR *npc)
 {
+	// MOD: Rebased RECT table for a larger/shifted sprite layout
 	RECT rcLeft[7] = {
-		{0, 64, 24, 88},
-		{24, 64, 48, 88},
-		{0, 64, 24, 88},
-		{48, 64, 72, 88},
-		{72, 64, 96, 88},
-		{96, 64, 120, 88},
-		{120, 64, 144, 88},
+		{ 0,  64,  24,  88}, { 24,  64,  48,  88}, { 0,  64,  24,  88},
+		{48,  64,  72,  88}, { 72,  64,  96,  88}, {96,  64, 120,  88},
+		{120, 64, 144,  88}
 	};
 
 	RECT rcRight[7] = {
-		{0, 88, 24, 112},
-		{24, 88, 48, 112},
-		{0, 88, 24, 112},
-		{48, 88, 72, 112},
-		{72, 88, 96, 112},
-		{96, 88, 120, 112},
-		{120, 88, 144, 112},
+		{ 0,  88,  24, 112}, { 24,  88,  48, 112}, { 0,  88,  24, 112},
+		{48,  88,  72, 112}, { 72,  88,  96, 112}, {96,  88, 120, 112},
+		{120, 88, 144, 112}
 	};
 
 	switch (npc->act_no)
 	{
-		case 0:
+		case 0: // Initialize
 			npc->bits &= ~NPC_SHOOTABLE;
 			npc->act_no = 1;
-			npc->damage = 0;
-			npc->hit.front = 4 * 0x200;
+			npc->ym = 0;
 			// Fallthrough
-		case 1:
-			npc->ani_no = 0;
 
-			if (npc->x - (128 * 0x200) < gMC.x && npc->x + (128 * 0x200) > gMC.x && npc->y - (48 * 0x200) < gMC.y && npc->y + (32 * 0x200) > gMC.y)
+		case 1: // Waiting
+			npc->ani_no = 0;
+			// Check distance to player (32x20 tile box approximately)
+			if (gMC.x > npc->x - 0x10000 && gMC.x < npc->x + 0x10000 &&
+				gMC.y > npc->y - 0x6000  && gMC.y < npc->y + 0x4000)
 			{
 				npc->ani_wait = 0;
 				npc->act_no = 2;
 			}
 
+			// Aggro if shot
 			if (npc->shock)
 			{
 				npc->ani_no = 1;
@@ -63,112 +58,112 @@ void ActNpc080(NPCHAR *npc)
 				npc->bits &= ~NPC_SHOOTABLE;
 			}
 
-			if (gMC.x < npc->x)
-				npc->direct = 0;
-			else
-				npc->direct = 2;
-
+			// Face player
+			if (gMC.x < npc->x) npc->direct = 0;
+			else npc->direct = 2;
 			break;
 
-		case 2:
-			if (++npc->ani_wait > 6)
+		case 2: // Chasing/Walking
+			// MOD: If flag 0x400 is set, animate and move faster
+			if (!(npc->bits & 0x400))
 			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
+				if (++npc->ani_wait > 5) { npc->ani_wait = 0; npc->ani_no++; }
+			}
+			else
+			{
+				if (++npc->ani_wait > 2) { npc->ani_wait = 0; npc->ani_no++; }
 			}
 
-			if (npc->ani_no > 3)
-				npc->ani_no = 0;
+			if (npc->ani_no > 3) npc->ani_no = 0;
 
-			if (npc->x - (16 * 0x200) < gMC.x && npc->x + (16 * 0x200) > gMC.x)
+			// MOD: Increased attack trigger distance (0x2600 vs vanilla 0x2000)
+			if (gMC.x > npc->x - 0x2600 && gMC.x < npc->x + 0x2600)
 			{
-				npc->hit.front = (18 * 0x200);
 				npc->act_wait = 0;
 				npc->act_no = 3;
 				npc->bits |= NPC_SHOOTABLE;
-				PlaySoundObject(34, SOUND_MODE_PLAY);
+				PlaySoundObject(34, SOUND_MODE_PLAY); // Hammer lift sound
 
-				if (npc->direct == 0)
-					npc->xm = -0x400;
-				else
-					npc->xm = 0x400;
+				// Start the lunge
+				if (npc->direct == 0) npc->xm = -0x400;
+				else npc->xm = 0x400;
 			}
 
-			if (gMC.x < npc->x)
+			// Movement speed logic (MOD: buffed speeds for 0x400 flag)
+			if (!(npc->bits & 0x400))
 			{
-				npc->direct = 0;
-				npc->xm = -0x100;
+				if (gMC.x < npc->x) { npc->direct = 0; npc->xm = -0x130; }
+				else { npc->direct = 2; npc->xm = 0x130; }
 			}
 			else
 			{
-				npc->direct = 2;
-				npc->xm = 0x100;
+				if (gMC.x < npc->x) { npc->direct = 0; npc->xm = -0x240; }
+				else { npc->direct = 2; npc->xm = 0x240; }
 			}
-
 			break;
 
-		case 3:
+		case 3: // Swing Back
 			npc->xm = 0;
+			npc->act_wait++;
 
-			if (++npc->act_wait > 40)
+			// MOD: Speed up swing if 0x400 is set
+			if ((!(npc->bits & 0x400) && npc->act_wait > 40) || 
+			     ((npc->bits & 0x400) && npc->act_wait > 9))
 			{
 				npc->act_wait = 0;
 				npc->act_no = 4;
-				PlaySoundObject(106, SOUND_MODE_PLAY);
-			}
+				npc->ym = 0x2400; // Heavy downward momentum for the smash
+				PlaySoundObject(106, SOUND_MODE_PLAY); // Smash sound
 
+				// MOD: Quadruple damage during the actual impact frame!
+				npc->damage <<= 3; 
+			}
 			npc->ani_no = 4;
 			break;
 
-		case 4:
-			npc->damage = 10;
-
-			if (++npc->act_wait > 2)
+		case 4: // Impact
+			npc->act_wait++;
+			if (npc->act_wait > 2)
 			{
 				npc->act_wait = 0;
 				npc->act_no = 5;
+				npc->ani_no = 5;
 			}
-
-			npc->ani_no = 5;
 			break;
 
-		case 5:
+		case 5: // Recovery
 			npc->ani_no = 6;
+			npc->act_wait++;
 
-			if (++npc->act_wait > 60)
+			// MOD: Recovery time scales with Elite flag
+			int recovery_limit = (npc->bits & 0x400) ? 6 : 21;
+			
+			if (npc->act_wait >= recovery_limit)
+			{
 				npc->act_no = 0;
-
+				npc->ym = 0;
+				// MOD: Restore normal damage value
+				npc->damage >>= 3; 
+			}
 			break;
 	}
 
-	if (npc->xm < 0 && npc->flag & 1)
-		npc->xm = 0;
-	if (npc->xm > 0 && npc->flag & 4)
-		npc->xm = 0;
+	// Gravity and Wall Collision
+	if (npc->xm < 0 && npc->flag & 1) npc->xm = 0;
+	if (npc->xm > 0 && npc->flag & 4) npc->xm = 0;
 
 	npc->ym += 0x20;
 
-	if (npc->xm > 0x400)
-		npc->xm = 0x400;
-	if (npc->xm < -0x400)
-		npc->xm = -0x400;
-
-#ifdef FIX_BUGS
-	if (npc->ym > 0x5FF)
-		npc->ym = 0x5FF;
-	if (npc->ym < -0x5FF)
-		npc->ym = -0x5FF;
-#else
-	// Caps npc->xm instead of npc->ym
-	if (npc->ym > 0x5FF)
-		npc->xm = 0x5FF;
-	if (npc->ym < -0x5FF)
-		npc->xm = -0x5FF;
-#endif
+	// Speed Caps
+	if (npc->xm > 0x400)  npc->xm = 0x400;
+	if (npc->xm < -0x400) npc->xm = -0x400;
+	if (npc->ym > 0x5FF)  npc->ym = 0x5FF;
+	if (npc->ym < -0x5FF) npc->ym = -0x5FF;
 
 	npc->x += npc->xm;
 	npc->y += npc->ym;
 
+	// Set Framerect
 	if (npc->direct == 0)
 		npc->rect = rcLeft[npc->ani_no];
 	else
@@ -689,12 +684,15 @@ void ActNpc085(NPCHAR *npc)
 		case 0:
 			npc->ani_no = 0;
 
-			if (npc->x - (8 * 0x200) < gMC.x && npc->x + (8 * 0x200) > gMC.x && npc->y - (16 * 0x200) < gMC.y && npc->y + (8 * 0x200) > gMC.y)
+			// MOD: Changed check so player must be closely overlapping it.
+			// life threshold <= 2 instead of == 1
+			if (npc->x - (8 * 0x200) < gMC.x && npc->x + (8 * 0x200) > gMC.x && 
+			    npc->y - (16 * 0x200) < gMC.y && npc->y + (8 * 0x200) > gMC.y && 
+			    npc->life <= 2)
 			{
 				PlaySoundObject(43, SOUND_MODE_PLAY);
 				npc->act_no = 1;
 			}
-
 			break;
 
 		case 1:
@@ -767,28 +765,21 @@ void ActNpc086(NPCHAR *npc)
 		npc->y += npc->ym;
 	}
 
-	switch (npc->exp)
-	{
-		case 1:
-			npc->rect = rect1[npc->ani_no];
-			break;
 
-		case 3:
-			npc->rect = rect3[npc->ani_no];
-			break;
-	}
+	int sprite_offset = npc->size; // Sourced from field 0x44
+	
+	npc->rect.left = sprite_offset;
+	npc->rect.right = sprite_offset + 16;
+	npc->rect.top = 80;
+	npc->rect.bottom = 96;
 
 	if (npc->direct == 0)
 		++npc->count1;
 
 	if (npc->count1 > 550)
 		npc->cond = 0;
-
 	if (npc->count1 > 500 && npc->count1 / 2 % 2)
 		npc->rect.right = 0;
-
-	if (npc->count1 > 547)
-		npc->rect = rcLast;
 }
 
 // Heart

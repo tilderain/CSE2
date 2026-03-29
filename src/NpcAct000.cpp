@@ -212,33 +212,39 @@ void ActNpc001(NPCHAR *npc)
 // Behemoth
 void ActNpc002(NPCHAR *npc)
 {
-	// Rects
+	// MOD: Entirely new RECT array for a 32x24 sprite
 	RECT rcLeft[7] = {
-		{32, 0, 64, 24},
-		{0, 0, 32, 24},
-		{32, 0, 64, 24},
-		{64, 0, 96, 24},
-		{96, 0, 128, 24},
-		{128, 0, 160, 24},
-		{160, 0, 192, 24},
+		{ 32,  0,  64, 24},
+		{  0,  0,  32, 24},
+		{ 32,  0,  64, 24},
+		{ 64,  0,  96, 24},
+		{ 96,  0, 128, 24},
+		{128,  0, 160, 24},
+		{160,  0, 192, 24},
 	};
 
 	RECT rcRight[7] = {
-		{32, 24, 64, 48},
-		{0, 24, 32, 48},
-		{32, 24, 64, 48},
-		{64, 24, 96, 48},
-		{96, 24, 128, 48},
+		{ 32, 24,  64, 48},
+		{  0, 24,  32, 48},
+		{ 32, 24,  64, 48},
+		{ 64, 24,  96, 48},
+		{ 96, 24, 128, 48},
 		{128, 24, 160, 48},
 		{160, 24, 192, 48},
 	};
 
-	// Turn when touching a wall
-	if (npc->flag & 1)
+	// Turn around when hitting a wall
+	if (!(npc->flag & 1))
+	{
+		if (npc->flag & 4)
+			npc->direct = 0;
+	}
+	else
+	{
 		npc->direct = 2;
-	else if (npc->flag & 4)
-		npc->direct = 0;
+	}
 
+	// State Machine
 	switch (npc->act_no)
 	{
 		case 0: // Walking
@@ -247,71 +253,80 @@ void ActNpc002(NPCHAR *npc)
 			else
 				npc->xm = 0x100;
 
+			// Animation
 			if (++npc->ani_wait > 8)
 			{
 				npc->ani_wait = 0;
 				++npc->ani_no;
 			}
-
 			if (npc->ani_no > 3)
 				npc->ani_no = 0;
 
-			if (npc->shock)
+			// If shot, transition to hit/stun state
+			if (npc->shock != 0)
 			{
 				npc->count1 = 0;
 				npc->act_no = 1;
 				npc->ani_no = 4;
 			}
-
 			break;
 
-		case 1: // Shot
+		case 1: // Stunned / Prep Charge
+			// Friction (Decelerate)
 			npc->xm = (npc->xm * 7) / 8;
 
 			if (++npc->count1 > 40)
 			{
-				if (npc->shock)
+				if (npc->shock == 0)
 				{
+					// If no longer being shot, go back to walking
+					npc->act_no = 0;
+					npc->ani_wait = 0;
+				}
+				else
+				{
+					// If continuously shot, enter Rage/Charge state
 					npc->count1 = 0;
 					npc->act_no = 2;
 					npc->ani_no = 6;
 					npc->ani_wait = 0;
-					npc->damage = 5;
-				}
-				else
-				{
-					npc->act_no = 0;
-					npc->ani_wait = 0;
+					
+					// MOD: Quadruple Damage Output
+					npc->damage <<= 2; 
 				}
 			}
 			break;
 
-		case 2: // Charge
+		case 2: // Charging
 			if (npc->direct == 0)
-				npc->xm = -0x400;
+				npc->xm = -0x400; // Fast charge left
 			else
-				npc->xm = 0x400;
+				npc->xm = 0x400;  // Fast charge right
 
 			if (++npc->count1 > 200)
 			{
+				// End charge
 				npc->act_no = 0;
-				npc->damage = 1;
+				
+				// MOD: Restore normal damage
+				npc->damage >>= 2;
 			}
 
+			// Charge animation and effects
 			if (++npc->ani_wait > 5)
 			{
 				npc->ani_wait = 0;
 				++npc->ani_no;
 			}
-
+			
 			if (npc->ani_no > 6)
 			{
 				npc->ani_no = 5;
-				// These three lines are missing in the Linux port, because it's based on v1.0.0.4:
-				// https://www.cavestory.org/forums/threads/version-1-0-0-5-really-different-than-1-0-0-6.102/#post-3231
-				PlaySoundObject(26, SOUND_MODE_PLAY);
-				SetNpChar(4, npc->x, npc->y + (3 * 0x200), 0, 0, 0, NULL, 0x100);
-				SetQuake(8);
+				
+				// Stomping effect
+				PlaySoundObject(26, SOUND_MODE_PLAY); // Heavy stomp sound
+				SetNpChar(4, npc->x, npc->y + 0x600, 0, 0, 0, NULL, 0x100); // Smoke particle
+				SetQuake(8); // Screen shake
 			}
 			break;
 	}
@@ -321,7 +336,7 @@ void ActNpc002(NPCHAR *npc)
 	if (npc->ym > 0x5FF)
 		npc->ym = 0x5FF;
 
-	// Move
+	// Apply velocity
 	npc->x += npc->xm;
 	npc->y += npc->ym;
 
@@ -331,7 +346,6 @@ void ActNpc002(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Dead enemy (to make sure the damage-value doesn't teleport to a newly-loaded NPC)
 void ActNpc003(NPCHAR *npc)
 {
@@ -422,18 +436,18 @@ void ActNpc004(NPCHAR *npc)
 // Critter (Green, Egg Corridor)
 void ActNpc005(NPCHAR *npc)
 {
+	// MOD: Sprite X shifted by +0x60 (96 pixels)
 	RECT rcLeft[3] = {
-		{0, 48, 16, 64},
-		{16, 48, 32, 64},
-		{32, 48, 48, 64},
+		{96, 48, 112, 64},
+		{112, 48, 128, 64},
+		{128, 48, 144, 64},
 	};
 
 	RECT rcRight[3] = {
-		{0, 64, 16, 80},
-		{16, 64, 32, 80},
-		{32, 64, 48, 80},
+		{96, 64, 112, 80},
+		{112, 64, 128, 80},
+		{128, 64, 144, 80},
 	};
-
 	switch (npc->act_no)
 	{
 		case 0: // Initialize
@@ -1531,17 +1545,6 @@ void ActNpc015(NPCHAR *npc)
 // Save point
 void ActNpc016(NPCHAR *npc)
 {
-	RECT rect[8] = {
-		{96, 16, 112, 32},
-		{112, 16, 128, 32},
-		{128, 16, 144, 32},
-		{144, 16, 160, 32},
-		{160, 16, 176, 32},
-		{176, 16, 192, 32},
-		{192, 16, 208, 32},
-		{208, 16, 224, 32},
-	};
-
 	int i;
 
 	switch (npc->act_no)
@@ -1558,12 +1561,10 @@ void ActNpc016(NPCHAR *npc)
 				for (i = 0; i < 4; ++i)
 					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 			}
-
-			// Fallthrough
+			break;
 		case 1:
 			if (npc->flag & 8)
 				npc->bits |= NPC_INTERACTABLE;
-
 			break;
 	}
 
@@ -1582,7 +1583,12 @@ void ActNpc016(NPCHAR *npc)
 
 	npc->y += npc->ym;
 
-	npc->rect = rect[npc->ani_no];
+	// MOD: Dynamic Rect Calculation (Replaces local array)
+	// Base X is 0x60 (96). Frame width is 16.
+	npc->rect.left = (npc->ani_no * 16) + 96; 
+	npc->rect.right = npc->rect.left + 16;
+	npc->rect.top = 16;
+	npc->rect.bottom = 32;
 }
 
 // Health refill

@@ -13,37 +13,56 @@
 
 static void Vanish(BULLET *bul)
 {
-	if (bul->code_bullet != 37 && bul->code_bullet != 38 && bul->code_bullet != 39)
-		PlaySoundObject(28, SOUND_MODE_PLAY);
+	// 37, 38, and 39 are the Bullet IDs for the Sword (Lv1, Lv2, Lv3).
+	// If the bullet is a sword, do NOT play the "tink" sound.
+	if (bul->code_bullet == 37 || bul->code_bullet == 38 || bul->code_bullet == 39)
+	{
+		SetCaret(bul->x, bul->y, CARET_PROJECTILE_DISSIPATION, 1);
+	}
 	else
-		SetCaret(bul->x, bul->y, 2, 1);
+	{
+		// Play standard "Tink" sound for all other bullets
+		PlaySoundObject(28, SOUND_MODE_PLAY);
+	}
 
-	bul->cond = 0;
-	SetCaret(bul->x, bul->y, 2, 2);
+	bul->cond = 0; // Destroy the bullet
+	SetCaret(bul->x, bul->y, CARET_PROJECTILE_DISSIPATION, 2);
 }
 
 int JudgeHitBulletBlock(int x, int y, BULLET *bul)
 {
-	int i;
+
 	int hit = 0;
-	if (bul->x - bul->blockXL < ((x * 16) + 8) * 0x200
-		&& bul->x + bul->blockXL > ((x * 16) - 8) * 0x200
-		&& bul->y - bul->blockYL < ((y * 16) + 8) * 0x200
-		&& bul->y + bul->blockYL > ((y * 16) - 8) * 0x200)
-		hit |= 0x200;
 
-	if (hit && bul->bbits & 0x60 && GetAttribute(x, y) == 0x43)
+	// Check if bullet overlaps the block tile
+	if (bul->x - bul->blockXL < (x * 16 + 8) * 0x200 &&
+		bul->x + bul->blockXL > (x * 16 - 8) * 0x200 &&
+		bul->y - bul->blockYL < (y * 16 + 8) * 0x200 &&
+		bul->y + bul->blockYL > (y * 16 - 8) * 0x200)
 	{
-		if (!(bul->bbits & 0x40))
-			bul->cond = 0;
+		hit = 0x200;
+	}
 
-		SetCaret(bul->x, bul->y, 2, 0);
-		PlaySoundObject(12, SOUND_MODE_PLAY);
+	// 0x60 = Bits for "Breaks blocks" (0x20) and "Pierces blocks" (0x40)
+	if (hit && (bul->bbits & 0x60))
+	{
+		if (GetAttribute(x, y) == 0x43) // 0x43 is the Breakable Block attribute
+		{
+			// MOD: In Vanilla, this checked if it was NOT a piercing weapon 
+			// and destroyed the bullet (bul->cond = 0).
+			// The modder changed this to check IF it IS a piercing weapon
+			// and resets its count1 timer. Non-piercing weapons are no longer destroyed!
+			if (bul->bbits & 0x40)
+				bul->count1 = 0;
 
-		for (i = 0; i < 4; ++i)
-			SetNpChar(4, x * 0x200 * 0x10, y * 0x200 * 0x10, Random(-0x200, 0x200), Random(-0x200, 0x200), 0, NULL, 0x100);
-
-		ShiftMapParts(x, y);
+			SetCaret(bul->x, bul->y, CARET_PROJECTILE_DISSIPATION, 0);
+			PlaySoundObject(12, SOUND_MODE_PLAY); // Block break sound
+			
+			for (int i = 0; i < 4; i++)
+				SetNpChar(4, x * 0x2000, y * 0x2000, Random(-0x200, 0x200), Random(-0x200, 0x200), 0, NULL, 0);
+			
+			ShiftMapParts(x, y); // Break the block
+		}
 	}
 
 	return hit;
@@ -329,7 +348,7 @@ int JudgeHitBulletTriangleH(int x, int y, BULLET *bul)
 
 
 // Mod-specific Global Variables (Likely for a Harpoon or Grapple weapon)
- unsigned char gGrappleState;
+ extern unsigned char gGrappleState;
  int gGrappleDist;
  int gGrappleTgtX;
  int gGrappleTgtY;

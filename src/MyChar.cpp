@@ -44,8 +44,8 @@ void InitMyChar(void)
 	gMC.hit.front = 5 * 0x200;
 	gMC.hit.bottom = 8 * 0x200;
 
-	gMC.life = 3;
-	gMC.max_life = 3;
+	gMC.life = 5;
+	gMC.max_life = 5;
 	gMC.unit = 0;
 
 	// This is initialized with the values the game uses in vanilla
@@ -272,11 +272,21 @@ void PutMyChar(int fx, int fy)
 		PutBitmap3(&grcGame, SubpixelToScreenCoord(gMC.x) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fx), SubpixelToScreenCoord(gMC.y) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fy), &rcBubble[(gMC.bubble / 2) % 2], SURFACE_ID_CARET);
 }
 
+#include <math.h>
+
+// Modder-added Global Variables (mapped to addresses in the 0x49xxxx range)
+int gGrappleState;      // DAT_00493804 (0 = Normal, 2 = Grappling)
+int gGrappleX;          // DAT_004937f8 (Pivot X coordinate)
+int gGrappleY;          // DAT_004937fc (Pivot Y coordinate)
+int gGrappleLength;     // DAT_00493818 (Length of the rope)
+int gGrappleMomentum;   // DAT_0049381c (Angular velocity / swing momentum)
+
+// Replaces the vanilla ActMyChar_Normal
+
 void ActMyChar_Normal(BOOL bKey)
 {
-	// Get speeds and accelerations
-	int max_move;
 	int max_dash;
+	int max_move;
 	int gravity1;
 	int gravity2;
 	int jump;
@@ -285,10 +295,6 @@ void ActMyChar_Normal(BOOL bKey)
 	int resist;
 
 	int a, x;
-
-	MYCHAR_PHYSICS *physics;
-
-		//Debug fly
 	if (gDebug.bNoclip)
 	{
 		if (gKey & gKeyLeft)
@@ -315,107 +321,66 @@ void ActMyChar_Normal(BOOL bKey)
 
 		return;
 	}
-
+	// Do not run physics if dead or hidden
 	if (gMC.cond & 2)
 		return;
 
-	physics = (gMC.flag & 0x100) ? &gMC.physics_underwater : &gMC.physics_normal;
-	max_dash = physics->max_dash;
-	gravity1 = physics->gravity1;
-	gravity2 = physics->gravity2;
-	dash1 = physics->dash1;
-	dash2 = physics->dash2;
-	resist = physics->resist;
-	jump = physics->jump;
+	// --- 1. Base Physics Constants Setup ---
+	if (gMC.flag & 0x100) // Underwater
+	{
+		max_dash = 0x196;
+		gravity1 = 0x28;  // <--- FIXED
+		gravity2 = 0x10;  // <--- FIXED
+		jump     = 0x280;
+		dash1    = 0x2A;
+		dash2    = 0x10;
+		resist   = 0x19;
+	}
+	else // On Land / In Air
+	{
+		max_dash = 0x32C;
+		gravity1 = 0x50;  // <--- FIXED: Normal gravity pull
+		gravity2 = 0x20;  // <--- FIXED: Reduced gravity pull while jump is held
+		jump     = 0x500; // <--- Normal jump power
+		dash1    = 0x55;
+		dash2    = 0x20;
+		resist   = 0x33;
+	}
 
-	// Don't create "?" effect
+	// MOD: If Grappling, massively increase maximum dash and jump limits
+	if (gGrappleState == 2)
+	{
+		max_dash <<= 4; // Shift left 4 (x16 max speed limit)
+		jump     <<= 2; // Shift left 2 (x4 jump strength limit)
+	}
+
+	// MOD: Check for a specific custom NPC Flag (170 / 0xAA) to give a speed buff
+	if (GetNPCFlag(0xAA))
+	{
+		jump += 0x1B0;
+	}
+
 	gMC.ques = FALSE;
 
 	// If can't control player, stop boosting
 	if (!bKey)
 		gMC.boost_sw = 0;
 
-	// Movement on the ground
-	if (gMC.flag & 8 || gMC.flag & 0x10 || gMC.flag & 0x20)
+	// --- 2. Ground vs Air Movement ---
+	if (!(gMC.flag & 8) && !(gMC.flag & 0x10) && !(gMC.flag & 0x20))
 	{
-		// Stop boosting and refuel
-		gMC.boost_sw = 0;
-
-		if (gMC.equip & EQUIP_BOOSTER_0_8)
-		{
-			gMC.boost_cnt = 50;
-		}
-		else if (gMC.equip & EQUIP_BOOSTER_2_0)
-		{
-			gMC.boost_cnt = 50;
-		}
-		else
-		{
-			gMC.boost_cnt = 0;
-		}
-
-		// Move in direction held
-		if (bKey)
-		{
-			if (gKeyTrg == gKeyDown && gKey == gKeyDown && !(gMC.cond & 1) && !(g_GameFlags & 4))
-			{
-				gMC.cond |= 1;
-				gMC.ques = TRUE;
-			}
-			else if (gKey == gKeyDown)
-			{
-				// There probably used to be commented-out code here
-			}
-			else
-			{
-				if (gKey & gKeyLeft && gMC.xm > -max_dash)
-					gMC.xm -= dash1;
-				if (gKey & gKeyRight && gMC.xm < max_dash)
-					gMC.xm += dash1;
-
-				if (gKey & gKeyLeft)
-					gMC.direct = 0;
-				if (gKey & gKeyRight)
-					gMC.direct = 2;
-			}
-		}
-
-		// Friction
-		if (!(gMC.cond & 0x20))
-		{
-			if (gMC.xm < 0)
-			{
-				if (gMC.xm > -resist)
-					gMC.xm = 0;
-				else
-					gMC.xm += resist;
-			}
-			if (gMC.xm > 0)
-			{
-				if (gMC.xm < resist)
-					gMC.xm = 0;
-				else
-					gMC.xm -= resist;
-			}
-		}
-	}
-	else
-	{
-		// Start boosting
+		// IN AIR
 		if (bKey)
 		{
 			if (gMC.equip & (EQUIP_BOOSTER_0_8 | EQUIP_BOOSTER_2_0) && gKeyTrg & gKeyJump && gMC.boost_cnt != 0)
 			{
-				// Booster 0.8
 				if (gMC.equip & EQUIP_BOOSTER_0_8)
 				{
 					gMC.boost_sw = 1;
-
 					if (gMC.ym > 0x100)
 						gMC.ym /= 2;
 				}
 
-				// Booster 2.0
 				if (gMC.equip & EQUIP_BOOSTER_2_0)
 				{
 					if (gKey & gKeyUp)
@@ -451,7 +416,7 @@ void ActMyChar_Normal(BOOL bKey)
 				}
 			}
 
-			// Move left and right
+			// Move left and right in air
 			if (gKey & gKeyLeft && gMC.xm > -max_dash)
 				gMC.xm -= dash2;
 			if (gKey & gKeyRight && gMC.xm < max_dash)
@@ -476,33 +441,76 @@ void ActMyChar_Normal(BOOL bKey)
 		if (gMC.boost_cnt == 0 || !(gKey & gKeyJump))
 			gMC.boost_sw = 0;
 	}
+	else
+	{
+		// ON GROUND
+		gMC.boost_sw = 0;
 
-	// Jumping
+		// Refuel booster
+		if (!(gMC.equip & EQUIP_BOOSTER_0_8))
+		{
+			if (!(gMC.equip & EQUIP_BOOSTER_2_0))
+				gMC.boost_cnt = 0;
+			else
+				gMC.boost_cnt = 50;
+		}
+		else
+		{
+			gMC.boost_cnt = 50;
+		}
+
+		if (bKey)
+		{
+			if (gKeyTrg == gKeyDown && gKey == gKeyDown && !(gMC.cond & 1) && !(g_GameFlags & 4))
+			{
+				gMC.cond |= 1;
+				gMC.ques = TRUE;
+			}
+			else if (gKey != gKeyDown)
+			{
+				// Ground Acceleration
+				if (gKey & gKeyLeft && gMC.xm > -max_dash)
+					gMC.xm -= dash1;
+				if (gKey & gKeyRight && gMC.xm < max_dash)
+					gMC.xm += dash1;
+
+				if (gKey & gKeyLeft)
+					gMC.direct = 0;
+				if (gKey & gKeyRight)
+					gMC.direct = 2;
+			}
+		}
+
+		// Friction
+		if (!(gMC.cond & 0x20))
+		{
+			if (gMC.xm < 0)
+			{
+				if (gMC.xm > -resist)
+					gMC.xm = 0;
+				else
+					gMC.xm += resist;
+			}
+			if (gMC.xm > 0)
+			{
+				if (gMC.xm < resist)
+					gMC.xm = 0;
+				else
+					gMC.xm -= resist;
+			}
+		}
+	}
+
+	// --- 3. Jumping & Vertical Forces ---
 	if (bKey)
 	{
-		// Look up and down
-		if (gKey & gKeyUp)
-			gMC.up = TRUE;
-		else
-			gMC.up = FALSE;
+		gMC.up = (gKey & gKeyUp);
+		gMC.down = (gKey & gKeyDown) && !(gMC.flag & 8);
 
-		if (gKey & gKeyDown && !(gMC.flag & 8))
-			gMC.down = TRUE;
-		else
-			gMC.down = FALSE;
-
-		if (gKeyTrg & gKeyJump && (gMC.flag & 8 || gMC.flag & 0x10 || gMC.flag & 0x20))
+		if (gKeyTrg & gKeyJump && (gMC.flag & 8 || gMC.flag & 0x10 || gMC.flag & 0x20) && !(gMC.flag & 0x2000))
 		{
-			if (gMC.flag & 0x2000)
-			{
-				// Another weird empty case needed for accurate assembly.
-				// There probably used to be some commented-out code here.
-			}
-			else
-			{
-				gMC.ym = -jump;
-				PlaySoundObject(15, SOUND_MODE_PLAY);
-			}
+			gMC.ym = -jump;
+			PlaySoundObject(15, SOUND_MODE_PLAY);
 		}
 	}
 
@@ -515,220 +523,298 @@ void ActMyChar_Normal(BOOL bKey)
 		--gMC.boost_cnt;
 
 	// Wind / current forces
-	if (gMC.flag & 0x1000)
-		gMC.xm -= 0x88;
-	if (gMC.flag & 0x2000)
-		gMC.ym -= 0x80;
-	if (gMC.flag & 0x4000)
-		gMC.xm += 0x88;
-	if (gMC.flag & 0x8000)
-		gMC.ym += 0x55;
+	if (gMC.flag & 0x1000) gMC.xm -= 0x88;
+	if (gMC.flag & 0x2000) gMC.ym -= 0x80;
+	if (gMC.flag & 0x4000) gMC.xm += 0x88;
+	if (gMC.flag & 0x8000) gMC.ym += 0x55;
 
-	// Booster 2.0 forces and effects
-	if (gMC.equip & EQUIP_BOOSTER_2_0 && gMC.boost_sw != 0)
+	// Gravity and Booster Physics
+	if (!(gMC.equip & EQUIP_BOOSTER_2_0) || gMC.boost_sw == 0)
 	{
-		if (gMC.boost_sw == 1)
+		if (!(gMC.flag & 0x2000))
 		{
-			// Go up when going into a wall
-			if (gMC.flag & 5)
-				gMC.ym = -0x100;
-
-			// Move in direction facing
-			if (gMC.direct == 0)
-				gMC.xm -= 0x20;
-			if (gMC.direct == 2)
-				gMC.xm += 0x20;
-
-			// Boost particles (and sound)
-			if (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1)
+			if (!(gMC.equip & EQUIP_BOOSTER_0_8) || gMC.boost_sw == 0 || gMC.ym < -0x3FF)
 			{
-				if (gMC.direct == 0)
-					SetCaret(gMC.x + (2 * 0x200), gMC.y + (2 * 0x200), 7, 2);
-				if (gMC.direct == 2)
-					SetCaret(gMC.x - (2 * 0x200), gMC.y + (2 * 0x200), 7, 0);
-
-				PlaySoundObject(113, SOUND_MODE_PLAY);
+				if (gMC.ym < 0 && bKey && gKey & gKeyJump)
+					gMC.ym += gravity2;
+				else
+					gMC.ym += gravity1;
+			}
+			else
+			{
+				// Booster 0.8 / Mimiga Mask float
+				gMC.ym -= 0x20;
+				if (gMC.boost_cnt % 3 == 0)
+				{
+					SetCaret(gMC.x, gMC.y + (gMC.hit.bottom / 2), 7, 3);
+					PlaySoundObject(113, SOUND_MODE_PLAY);
+				}
+				if (gMC.flag & 2)
+					gMC.ym = 0x200;
 			}
 		}
-		else if (gMC.boost_sw == 2)
+		else
 		{
-			// Move upwards
-			gMC.ym -= 0x20;
-
-			// Boost particles (and sound)
-			if (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1)
-			{
-				SetCaret(gMC.x, gMC.y + (6 * 0x200), 7, 3);
-				PlaySoundObject(113, SOUND_MODE_PLAY);
-			}
+			gMC.ym += gravity1;
 		}
-		else if (gMC.boost_sw == 3 && (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1))
+	}
+	else if (gMC.boost_sw == 1)
+	{
+		if (gMC.flag & 5) gMC.ym = -0x100;
+
+		if (gMC.direct == 0) gMC.xm -= 0x20;
+		if (gMC.direct == 2) gMC.xm += 0x20;
+
+		if (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1)
 		{
-			// Boost particles (and sound)
-			SetCaret(gMC.x, gMC.y - (6 * 0x200), 7, 1);
+			if (gMC.direct == 0) SetCaret(gMC.x + 0x400, gMC.y + 0x400, 7, 2);
+			if (gMC.direct == 2) SetCaret(gMC.x - 0x400, gMC.y + 0x400, 7, 0);
 			PlaySoundObject(113, SOUND_MODE_PLAY);
 		}
 	}
-	// Upwards wind/current
-	else if (gMC.flag & 0x2000)
+	else if (gMC.boost_sw == 2)
 	{
-		gMC.ym += gravity1;
-	}
-	// Booster 0.8
-	else if (gMC.equip & EQUIP_BOOSTER_0_8 && gMC.boost_sw != 0 && gMC.ym > -0x400)
-	{
-		// Upwards force
 		gMC.ym -= 0x20;
-
-		if (gMC.boost_cnt % 3 == 0)
+		if (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1)
 		{
-			SetCaret(gMC.x, gMC.y + (gMC.hit.bottom / 2), 7, 3);
+			SetCaret(gMC.x, gMC.y + 0xC00, 7, 3);
 			PlaySoundObject(113, SOUND_MODE_PLAY);
 		}
-
-		// Bounce off of ceiling
-		if (gMC.flag & 2)
-			gMC.ym = 0x200;
 	}
-	// Gravity while jump is held
-	else if (gMC.ym < 0 && bKey && gKey & gKeyJump)
+	else if (gMC.boost_sw == 3 && (gKeyTrg & gKeyJump || gMC.boost_cnt % 3 == 1))
 	{
-		gMC.ym += gravity2;
-	}
-	// Normal gravity
-	else
-	{
-		gMC.ym += gravity1;
+		SetCaret(gMC.x, gMC.y - 0xC00, 7, 1);
+		PlaySoundObject(113, SOUND_MODE_PLAY);
 	}
 
 	// Keep player on slopes
-	if (!bKey || !(gKeyTrg & gKeyJump))
+	if (!bKey || !(gKey & gKeyJump))
 	{
-		if (gMC.flag & 0x10 && gMC.xm < 0)
-			gMC.ym = -gMC.xm;
-		if (gMC.flag & 0x20 && gMC.xm > 0)
-			gMC.ym = gMC.xm;
-		if (gMC.flag & 8 && gMC.flag & 0x80000 && gMC.xm < 0)
-			gMC.ym = 0x400;
-		if (gMC.flag & 8 && gMC.flag & 0x10000 && gMC.xm > 0)
-			gMC.ym = 0x400;
-		if (gMC.flag & 8 && gMC.flag & 0x20000 && gMC.flag & 0x40000)
-			gMC.ym = 0x400;
+		if (gMC.flag & 0x10 && gMC.xm < 0) gMC.ym = -gMC.xm;
+		if (gMC.flag & 0x20 && gMC.xm > 0) gMC.ym = gMC.xm;
+		if (gMC.flag & 8 && gMC.flag & 0x80000 && gMC.xm < 0) gMC.ym = 0x400;
+		if (gMC.flag & 8 && gMC.flag & 0x10000 && gMC.xm > 0) gMC.ym = 0x400;
+		if (gMC.flag & 8 && gMC.flag & 0x20000 && gMC.flag & 0x40000) gMC.ym = 0x400;
 	}
 
-	if (0)
+	// Base Speed Limits
+	if (!(gMC.flag & 0x100) || (gMC.flag & 0xF000))
 	{
-		// There used to be an if-statement here that didn't do anything, but the compiler optimised it out.
-		// We only know this was here because empty if-statements affect the register usage.
-		// Since there's no code, we have no idea what the original condition actually was.
+		if (gMC.xm < -0x5FF) gMC.xm = -0x5FF;
+		if (gMC.xm >  0x5FF) gMC.xm =  0x5FF;
+		if (gMC.ym < -0x7FF) gMC.ym = -0x7FF;
+		if (gMC.ym >  0x5FF) gMC.ym =  0x5FF;
 	}
-
-	// Limit speed
-	if (gMC.flag & 0x100 && !(gMC.flag & (0x8000 | 0x4000 | 0x2000 | 0x1000)))
-		max_move = gMC.physics_underwater.max_move;	// Underwater or in wind
 	else
-		max_move = gMC.physics_normal.max_move;	// Normal conditions
-
-	if (gMC.xm < -max_move)
-		gMC.xm = -max_move;
-	if (gMC.ym < -max_move)
-		gMC.ym = -max_move;
-
-	if (gMC.xm > max_move)
-		gMC.xm = max_move;
-	if (gMC.ym > max_move)
-		gMC.ym = max_move;
-
-	// Water splashing
-	if (!gMC.no_splash_or_air_limit_underwater && !gMC.sprash && gMC.flag & 0x100)
 	{
-		int dir;
+		if (gMC.xm < -0x2FF) gMC.xm = -0x2FF;
+		if (gMC.xm >  0x2FF) gMC.xm =  0x2FF;
+		if (gMC.ym < -0x4FF) gMC.ym = -0x4FF;
+		if (gMC.ym >  0x2FF) gMC.ym =  0x2FF;
+	}
 
-		if (gMC.flag & 0x800)
-			dir = 2;
-		else
-			dir = 0;
-
+	// Splashing
+	if (!gMC.sprash && gMC.flag & 0x100)
+	{
 		if (!(gMC.flag & 8) && gMC.ym > 0x200)
 		{
 			for (a = 0; a < 8; ++a)
-			{
-				x = gMC.x + (Random(-8, 8) * 0x200);
-				SetNpChar(73, x, gMC.y, gMC.xm + Random(-0x200, 0x200), Random(-0x200, 0x80) - (gMC.ym / 2), dir, NULL, 0);
-			}
-
+				SetNpChar(73, gMC.x + (Random(-8, 8) * 0x200), gMC.y, gMC.xm + Random(-0x200, 0x80), Random(-0x200, 0x200), 0, NULL, 0);
 			PlaySoundObject(56, SOUND_MODE_PLAY);
 		}
-		else
+		else if (gMC.xm > 0x200 || gMC.xm < -0x200)
 		{
-			if (gMC.xm > 0x200 || gMC.xm < -0x200)
-			{
-				for (a = 0; a < 8; ++a)
-				{
-					x = gMC.x + (Random(-8, 8) * 0x200);
-					SetNpChar(73, x, gMC.y, gMC.xm + Random(-0x200, 0x200), Random(-0x200, 0x80), dir, NULL, 0);
-				}
-
-				PlaySoundObject(56, SOUND_MODE_PLAY);
-			}
+			for (a = 0; a < 8; ++a)
+				SetNpChar(73, gMC.x + (Random(-8, 8) * 0x200), gMC.y, gMC.xm + Random(-0x200, 0x200), 0, 0, NULL, 0);
+			PlaySoundObject(56, SOUND_MODE_PLAY);
 		}
-
 		gMC.sprash = TRUE;
 	}
+	if (!(gMC.flag & 0x100)) gMC.sprash = FALSE;
 
-	if (!(gMC.flag & 0x100))
-		gMC.sprash = FALSE;
-
-	// Spike damage
+	// Spike Damage
 	if (gMC.flag & 0x400)
 		DamageMyChar(10);
 
-	// Camera
+	// Camera Management
 	if (gMC.direct == 0)
 	{
 		gMC.index_x -= 0x200;
-		if (gMC.index_x < -0x8000)
-			gMC.index_x = -0x8000;
+		if (gMC.index_x < -0x8000) gMC.index_x = -0x8000;
 	}
 	else
 	{
 		gMC.index_x += 0x200;
-		if (gMC.index_x > 0x8000)
-			gMC.index_x = 0x8000;
+		if (gMC.index_x > 0x8000) gMC.index_x = 0x8000;
 	}
-	if (gKey & gKeyUp && bKey)
+	if (!(gKey & gKeyUp) || !bKey)
 	{
-		gMC.index_y -= 0x200;
-		if (gMC.index_y < -0x8000)
-			gMC.index_y = -0x8000;
-	}
-	else if (gKey & gKeyDown && bKey)
-	{
-		gMC.index_y += 0x200;
-		if (gMC.index_y > 0x8000)
-			gMC.index_y = 0x8000;
+		if (!(gKey & gKeyDown) || !bKey)
+		{
+			if (gMC.index_y > 0x200) gMC.index_y -= 0x200;
+			if (gMC.index_y < -0x200) gMC.index_y += 0x200;
+		}
+		else
+		{
+			gMC.index_y += 0x200;
+			if (gMC.index_y > 0x8000) gMC.index_y = 0x8000;
+		}
 	}
 	else
 	{
-		if (gMC.index_y > 0x200)
-			gMC.index_y -= 0x200;
-		if (gMC.index_y < -0x200)
-			gMC.index_y += 0x200;
+		gMC.index_y -= 0x200;
+		if (gMC.index_y < -0x8000) gMC.index_y = -0x8000;
 	}
 
+	// --- 4. MOD: THE GRAPPLING HOOK PHYSICS ENGINE ---
+	if (gGrappleState == 2)
+	{
+		// Weapon 5 (formerly Missile Launcher) extends/retracts rope
+		if (gSelectedArms == 5)
+		{
+			int half_len = gGrappleLength / 2;
+
+			// Extending Rope
+			if (gKey & gKeyDown)
+			{
+				if (gMC.x < gGrappleX + half_len && gMC.x > gGrappleX - gGrappleLength)
+				{
+					if (gMC.y > gGrappleY)
+					{
+						if (!(gMC.flag & 8)) gGrappleLength += 0x400; // Blocked by floor
+					}
+					else if (!(gMC.flag & 2))
+					{
+						gGrappleLength += 0x400; // Blocked by ceiling
+					}
+				}
+				else if (gMC.x < gGrappleX)
+				{
+					if (!(gMC.flag & 1)) gGrappleLength += 0x400; // Blocked by left wall
+				}
+				else if (!(gMC.flag & 4))
+				{
+					gGrappleLength += 0x400; // Blocked by right wall
+				}
+			}
+
+			// Retracting Rope
+			if (gKey & gKeyUp)
+			{
+				if (gMC.x < gGrappleX + half_len && gMC.x > gGrappleX - gGrappleLength)
+				{
+					if (gMC.y > gGrappleY)
+					{
+						if (!(gMC.flag & 2)) gGrappleLength -= 0x400;
+					}
+					else if (!(gMC.flag & 8))
+					{
+						gGrappleLength -= 0x400;
+					}
+				}
+				else if (gMC.x < gGrappleX)
+				{
+					if (!(gMC.flag & 4)) gGrappleLength -= 0x400;
+				}
+				else if (!(gMC.flag & 1))
+				{
+					gGrappleLength -= 0x400;
+				}
+			}
+		}
+
+		// Clamp Rope Length limits
+		if (gGrappleLength < 0x1001)  gGrappleLength = 0x1000;
+		else if (gGrappleLength > 0xBFFF) gGrappleLength = 0xC000;
+
+		// Calculate anticipated next position
+		int next_x = (gMC.xm > resist || gMC.xm < -resist) ? gMC.x + gMC.xm : gMC.x;
+		int next_y = gMC.y + gMC.ym;
+
+		// Find distance to pivot using Pythagorean theorem (FPU math converted to C)
+		float fdx = (float)(next_x - gGrappleX);
+		float fdy = (float)(next_y - gGrappleY);
+		int dist_to_pivot = (int)sqrt((fdx * fdx) + (fdy * fdy));
+
+		// Check if player has hit the end of the rope tension
+		if (dist_to_pivot >= gGrappleLength)
+		{
+			// Snap to perimeter of the circle
+			float angle = atan2(fdy, fdx);
+			
+			// Constrain positional velocity to keep the player on the rope boundary
+			gMC.xm = (int)(cos(angle) * gGrappleLength) - (gMC.x - gGrappleX);
+			gMC.ym = (int)(sin(angle) * gGrappleLength) - (gMC.y - gGrappleY);
+
+			int mom_y = 1;
+			int mom_x = -1;
+			int accel = gGrappleMomentum;
+
+			// Add Swing Momentum via Input (Below pivot point)
+			if (gMC.y > gGrappleY)
+			{
+				int half_len = gGrappleLength / 2;
+				if (gMC.x < gGrappleX + half_len && gMC.x > gGrappleX - gGrappleLength)
+				{
+					if (!(gKey & gKeyJump)) accel -= (accel / 5);
+					else accel += (accel / 3);
+				}
+
+				if (!(gKey & gKeyLeft))
+				{
+					if (gKey & gKeyRight)
+					{
+						if (gMC.xm < 1) accel -= 9;
+						else accel += 0x3C;
+					}
+				}
+				else if (gMC.xm < 0) accel += 0x3C;
+				else accel -= 9;
+			}
+
+			// Determine Tangent direction depending on quadrant
+			if (gMC.y < gGrappleY - (gGrappleLength / 2))
+			{
+				if (!(gKey & gKeyLeft) && ((gKey & gKeyRight) || gMC.xm > 0))
+				{
+					mom_y = 1;
+					mom_x = -1;
+				}
+				else
+				{
+					mom_y = -1;
+					mom_x = 1;
+				}
+			}
+			else if (!(gKey & gKeyLeft) && ((gKey & gKeyRight) || gMC.xm < 1))
+			{
+				mom_y = -1;
+				mom_x = 1;
+			}
+			else
+			{
+				mom_y = 1;
+				mom_x = -1;
+			}
+
+			// Apply damped momentum as a tangential velocity vector
+			gGrappleMomentum = accel / 50;
+			gMC.ym += gGrappleMomentum * mom_y;
+			gMC.xm += gGrappleMomentum * mom_x;
+		}
+		else
+		{
+			// Rope has slack: Provide a mild pull toward the pivot point
+			gMC.xm += (gGrappleX - next_x) / 100;
+			gMC.ym += (gGrappleY - next_y) / 100;
+		}
+	}
+
+	// Apply Final Calculated Velocities
 	gMC.tgt_x = gMC.x + gMC.index_x;
 	gMC.tgt_y = gMC.y + gMC.index_y;
 
-	// Change position
-	if (gMC.xm <= resist && gMC.xm >= -resist)
-	{
-		// This case is completely empty. This is most likely the result of commented-out code or some other change (so this is most likely inaccurate to the original source code)
-	}
-	else
-	{
-		gMC.x += gMC.xm;
-	}
-
+	gMC.x += gMC.xm;
 	gMC.y += gMC.ym;
 }
 

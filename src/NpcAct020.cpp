@@ -198,7 +198,8 @@ void ActNpc024(NPCHAR *npc)
 
 			break;
 
-		case 4:
+
+		case 4: // Charging animation
 			if (npc->x < gMC.x)
 				npc->direct = 2;
 			else
@@ -208,7 +209,7 @@ void ActNpc024(NPCHAR *npc)
 
 			if (npc->flag & 7 || npc->act_wait > 100)
 			{
-				npc->damage = 12;
+				npc->damage = 8; // MOD: Damage nerfed from 12 to 8
 				npc->act_no = 5;
 				npc->ani_no = 2;
 				npc->xm /= 2;
@@ -218,7 +219,7 @@ void ActNpc024(NPCHAR *npc)
 			if (npc->act_wait % 4 == 1)
 				PlaySoundObject(110, SOUND_MODE_PLAY);
 
-			if (++npc->ani_wait > 0)
+			if (++npc->ani_wait > 0) // MOD: Changed from 2 to 0 (super fast animation)
 			{
 				npc->ani_wait = 0;
 				++npc->ani_no;
@@ -229,10 +230,10 @@ void ActNpc024(NPCHAR *npc)
 
 			break;
 
-		case 5:
+		case 5: // Landing
 			if (npc->flag & 8)
 			{
-				npc->damage = 2;
+				npc->damage = 4; // MOD: Damage buffed from 2 to 4
 				npc->xm = 0;
 				npc->act_wait = 0;
 				npc->ani_no = 0;
@@ -466,7 +467,10 @@ void ActNpc026(NPCHAR *npc)
 				npc->xm /= 2;
 				npc->ym = 0;
 				npc->act_no = 3;
-				npc->bits &= ~NPC_IGNORE_SOLIDITY;
+				
+				// MOD: The following line was NOPed out!
+				// npc->bits &= ~NPC_IGNORE_SOLIDITY; 
+				// By leaving this out, the bat retains its original solidity flags and collides with walls.
 			}
 
 			break;
