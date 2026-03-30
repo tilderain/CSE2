@@ -83,30 +83,51 @@ void ActNpc121(NPCHAR *npc)
 // Colon (attacking)
 void ActNpc122(NPCHAR *npc)
 {
-	RECT rcLeft[10] = {
-		{0, 0, 16, 16},
-		{16, 0, 32, 16},
-		{32, 0, 48, 16},
-		{0, 0, 16, 16},
-		{48, 0, 64, 16},
-		{0, 0, 16, 16},
-		{80, 0, 96, 16},
-		{96, 0, 112, 16},
-		{112, 0, 128, 16},
-		{128, 0, 144, 16},
-	};
-
-	RECT rcRight[10] = {
-		{0, 16, 16, 32},
-		{16, 16, 32, 32},
-		{32, 16, 48, 32},
-		{0, 16, 16, 32},
-		{48, 16, 64, 32},
-		{0, 16, 16, 32},
-		{80, 16, 96, 32},
-		{96, 16, 112, 32},
+	// MOD: Expanded rect tables from 10 to 20 entries per direction
+	RECT rcLeft[20] = {
+		{  0,  0,  16, 16},
+		{ 16,  0,  32, 16},
+		{ 32,  0,  48, 16},
+		{  0,  0,  16, 16},
+		{ 48,  0,  64, 16},
+		{  0,  0,  16, 16},
+		{ 80,  0,  96, 16},
+		{ 96,  0, 112, 16},
+		{112,  0, 128, 16},
+		{128,  0, 144, 16},
+		{  0, 16,  16, 32},
+		{ 16, 16,  32, 32},
+		{ 32, 16,  48, 32},
+		{  0, 16,  16, 32},
+		{ 48, 16,  64, 32},
+		{  0, 16,  16, 32},
+		{ 80, 16,  96, 32},
+		{ 96, 16, 112, 32},
 		{112, 16, 128, 32},
 		{128, 16, 144, 32},
+	};
+
+	RECT rcRight[20] = {
+		{  0, 16,  16, 32},
+		{ 16, 16,  32, 32},
+		{ 32, 16,  48, 32},
+		{  0, 16,  16, 32},
+		{ 48, 16,  64, 32},
+		{  0, 16,  16, 32},
+		{ 80, 16,  96, 32},
+		{ 96, 16, 112, 32},
+		{112, 16, 128, 32},
+		{128, 16, 144, 32},
+		{  0, 32,  16, 48},
+		{ 16, 32,  32, 48},
+		{ 32, 32,  48, 48},
+		{  0, 32,  16, 48},
+		{ 48, 32,  64, 48},
+		{  0, 32,  16, 48},
+		{ 80, 32,  96, 48},
+		{ 96, 32, 112, 48},
+		{112, 32, 128, 48},
+		{128, 32, 144, 48},
 	};
 
 	switch (npc->act_no)
@@ -144,11 +165,15 @@ void ActNpc122(NPCHAR *npc)
 			break;
 
 		case 10:
-			npc->life = 1000;
+			// MOD: Only reset life/damage if not elite (0x400 bit unset)
+			if (!(npc->bits & 0x400))
+			{
+				npc->life = 1000;
+				npc->damage = 0;
+			}
 			npc->act_no = 11;
 			npc->act_wait = Random(0, 50);
 			npc->ani_no = 0;
-			npc->damage = 0;
 			// Fallthrough
 		case 11:
 			if (npc->act_wait != 0)
@@ -188,11 +213,14 @@ void ActNpc122(NPCHAR *npc)
 			}
 			else
 			{
-				npc->bits |= NPC_SHOOTABLE;
+				// MOD: Elite flag (0x400) skips setting NPC_SHOOTABLE and uses higher jump
+				if (!(npc->bits & 0x400))
+					npc->bits |= NPC_SHOOTABLE;
 				npc->act_no = 15;
 				npc->ani_no = 2;
-				npc->ym = -0x200;
-				npc->damage = 2;
+				npc->ym = (npc->bits & 0x400) ? -0x400 : -0x200;
+				if (!(npc->bits & 0x400))
+					npc->damage = 2;
 			}
 
 			break;
@@ -200,10 +228,13 @@ void ActNpc122(NPCHAR *npc)
 		case 15:
 			if (npc->flag & 8)
 			{
-				npc->bits |= NPC_SHOOTABLE;
+				// MOD: Elite flag check before setting NPC_SHOOTABLE
+				if (!(npc->bits & 0x400))
+					npc->bits |= NPC_SHOOTABLE;
 				npc->xm = 0;
 				npc->act_no = 10;
-				npc->damage = 0;
+				if (!(npc->bits & 0x400))
+					npc->damage = 0;
 			}
 
 			break;
@@ -213,7 +244,9 @@ void ActNpc122(NPCHAR *npc)
 			{
 				npc->xm = 0;
 				npc->act_no = 21;
-				npc->damage = 0;
+				// MOD: Only clear damage if not elite
+				if (!(npc->bits & 0x400))
+					npc->damage = 0;
 
 				if (npc->ani_no == 6)
 					npc->ani_no = 8;
@@ -232,8 +265,12 @@ void ActNpc122(NPCHAR *npc)
 			}
 			else
 			{
-				npc->bits |= NPC_SHOOTABLE;
-				npc->life = 1000;
+				// MOD: Only restore life and set NPC_SHOOTABLE if not elite
+				if (!(npc->bits & 0x400))
+				{
+					npc->bits |= NPC_SHOOTABLE;
+					npc->life = 1000;
+				}
 				npc->act_no = 11;
 				npc->act_wait = Random(0, 50);
 				npc->ani_no = 0;
@@ -242,12 +279,14 @@ void ActNpc122(NPCHAR *npc)
 			break;
 	}
 
-	if (npc->act_no > 10 && npc->act_no < 20 && npc->life != 1000)
+	// MOD: Elite flag also checked; only clear NPC_SHOOTABLE if not elite
+	if (npc->act_no > 10 && npc->act_no < 20 && !(npc->bits & 0x400) && npc->life != 1000)
 	{
 		npc->act_no = 20;
 		npc->ym = -0x200;
 		npc->ani_no = Random(6, 7);
-		npc->bits &= ~NPC_SHOOTABLE;
+		if (!(npc->bits & 0x400))
+			npc->bits &= ~NPC_SHOOTABLE;
 	}
 
 	npc->ym += 0x20;

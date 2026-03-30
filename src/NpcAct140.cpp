@@ -771,22 +771,23 @@ void ActNpc147(NPCHAR *npc)
 	int xm, ym;
 	unsigned char deg;
 
+	// MOD: RECT table shifted to new sprite sheet rows (top row 208-224, bottom 224-240)
 	RECT rcLeft[6] = {
-		{0, 96, 16, 112},
-		{16, 96, 32, 112},
-		{32, 96, 48, 112},
-		{48, 96, 64, 112},
-		{64, 96, 80, 112},
-		{80, 96, 96, 112},
+		{ 0, 208, 16, 224},
+		{16, 208, 32, 224},
+		{32, 208, 48, 224},
+		{48, 208, 64, 224},
+		{64, 208, 80, 224},
+		{80, 208, 96, 224},
 	};
 
 	RECT rcRight[6] = {
-		{0, 112, 16, 128},
-		{16, 112, 32, 128},
-		{32, 112, 48, 128},
-		{48, 112, 64, 128},
-		{64, 112, 80, 128},
-		{80, 112, 96, 128},
+		{ 0, 224, 16, 240},
+		{16, 224, 32, 240},
+		{32, 224, 48, 240},
+		{48, 224, 64, 240},
+		{64, 224, 80, 240},
+		{80, 224, 96, 240},
 	};
 
 	switch (npc->act_no)
@@ -960,9 +961,10 @@ void ActNpc148(NPCHAR *npc)
 	npc->y += npc->ym;
 	npc->x += npc->xm;
 
+	// MOD: Sprite sheet rows shifted (top 96→208, bottom 104→216)
 	RECT rect_left[2] = {
-		{96, 96, 104, 104},
-		{104, 96, 112, 104},
+		{ 96, 208, 104, 216},
+		{104, 208, 112, 216},
 	};
 
 	if (++npc->ani_no > 1)
@@ -988,28 +990,78 @@ void ActNpc149(NPCHAR *npc)
 			npc->x += 8 * 0x200;
 			npc->y += 8 * 0x200;
 
+			npc->bits |= NPC_SOLID_HARD;
+
+			// MOD: Check bits & 0x100 for initial state; if set, start in state 1 (carried)
+			if (!(npc->bits & 0x100))
+			{
+				npc->ani_no = 1;
+				if (npc->direct == 0)
+					npc->act_no = 10;
+				else
+					npc->act_no = 20;
+			}
+			else
+			{
+				npc->act_no = 1;
+				npc->ani_no = 3;
+			}
+
+			npc->xm = 0;
+			npc->ym = 0;
+			ActNpc150(npc);
+			return;
+
+		// MOD: New cases 1-8: being carried by Curly
+		case 1:
+			if (JudgeHitMyCharNPC4(npc))
+			{
+				npc->act_no = 2;
+				npc->ani_no = 2;
+				npc->count1 = 0;
+				SetQuake(30);
+			}
+			ActNpc150(npc);
+			return;
+
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+			if (++npc->count1 > 5)
+			{
+				npc->count1 = 0;
+				++npc->act_no;
+				PlaySoundObject(111, SOUND_MODE_PLAY);
+			}
+			ActNpc150(npc);
+			return;
+
+		case 8:
+			npc->ani_no = 1;
+			npc->count1 = 0;
 			if (npc->direct == 0)
 				npc->act_no = 10;
 			else
 				npc->act_no = 20;
-
-			npc->xm = 0;
-			npc->ym = 0;
-
-			npc->bits |= NPC_SOLID_HARD;
-			break;
+			ActNpc150(npc);
+			return;
 
 		case 10:
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			if (gMC.x < npc->x + (25 * 0x200) && gMC.x > npc->x - (25 * 0x10 * 0x200) && gMC.y < npc->y + (25 * 0x200) && gMC.y > npc->y - (25 * 0x200))
+			// MOD: Added y proximity check
+			if (gMC.x < npc->x + 0x3200 && gMC.x > npc->x - 0x32000 && gMC.y < npc->y + 0x3200 && gMC.y > npc->y - 0x3200)
 			{
 				npc->act_no = 11;
 				npc->act_wait = 0;
 			}
 
-			break;
+			ActNpc150(npc);
+			return;
 
 		case 11:
 			if (++npc->act_wait % 10 == 6)
@@ -1026,7 +1078,8 @@ void ActNpc149(NPCHAR *npc)
 				for (i = 0; i < 4; ++i)
 					SetNpChar(4, npc->x - (16 * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 
-				break;
+				ActNpc150(npc);
+				return;
 			}
 
 			if (gMC.flag & 1)
@@ -1048,13 +1101,15 @@ void ActNpc149(NPCHAR *npc)
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			if (gMC.x > npc->x - (25 * 0x200) && gMC.x < npc->x + (25 * 0x10 * 0x200) && gMC.y < npc->y + (25 * 0x200) && gMC.y > npc->y - (25 * 0x200))
+			// MOD: Added y proximity check
+			if (gMC.x > npc->x - 0x3200 && gMC.x < npc->x + 0x32000 && gMC.y < npc->y + 0x3200 && gMC.y > npc->y - 0x3200)
 			{
 				npc->act_no = 21;
 				npc->act_wait = 0;
 			}
 
-			break;
+			ActNpc150(npc);
+			return;
 
 		case 21:
 			if (++npc->act_wait % 10 == 6)
@@ -1071,7 +1126,8 @@ void ActNpc149(NPCHAR *npc)
 				for (i = 0; i < 4; ++i)
 					SetNpChar(4, npc->x + (16 * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 
-				break;
+				ActNpc150(npc);
+				return;
 			}
 
 			if (gMC.flag & 4)
@@ -1090,205 +1146,28 @@ void ActNpc149(NPCHAR *npc)
 			break;
 	}
 
-	if (npc->xm > 0x200)
-		npc->xm = 0x200;
-	if (npc->xm < -0x200)
-		npc->xm = -0x200;
-
-	npc->x += npc->xm;
-
-	RECT rect = {16, 0, 48, 32};
-	npc->rect = rect;
+	// MOD: Tail call to ActNpc150 to clamp xm and set rect
+	ActNpc150(npc);
 }
 
 // Quote
+// MOD: Function completely replaced - now just clamps xm (with elite speed boost) and sets rect
 void ActNpc150(NPCHAR *npc)
 {
-	int i;
+	// MOD: Elite flag (0x400) allows double speed limit
+	int xm_limit = (npc->bits & 0x400) ? 0x800 : 0x200;
+	if (npc->xm > xm_limit)
+		npc->xm = xm_limit;
+	if (npc->xm < -xm_limit)
+		npc->xm = -xm_limit;
 
-	RECT rcLeft[9] = {
-		{0, 0, 16, 16},
-		{48, 0, 64, 16},
-		{144, 0, 160, 16},
-		{16, 0, 32, 16},
-		{0, 0, 16, 16},
-		{32, 0, 48, 16},
-		{0, 0, 16, 16},
-		{160, 0, 176, 16},
-		{112, 0, 128, 16},
-	};
+	npc->x += npc->xm;
 
-	RECT rcRight[9] = {
-		{0, 16, 16, 32},
-		{48, 16, 64, 32},
-		{144, 16, 160, 32},
-		{16, 16, 32, 32},
-		{0, 16, 16, 32},
-		{32, 16, 48, 32},
-		{0, 16, 16, 32},
-		{160, 16, 176, 32},
-		{112, 16, 128, 32},
-	};
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->ani_no = 0;
-
-			if (npc->direct > 10)
-			{
-				npc->x = gMC.x;
-				npc->y = gMC.y;
-				npc->direct -= 10;
-			}
-			break;
-
-		case 2:
-			npc->ani_no = 1;
-			break;
-
-		case 10:
-			npc->act_no = 11;
-
-			for (i = 0; i < 4; ++i)
-				SetNpChar(4, npc->x, npc->y, Random(-0x155, 0x155), Random(-0x600, 0), 0, NULL, 0x100);
-
-			PlaySoundObject(71, SOUND_MODE_PLAY);
-			// Fallthrough
-		case 11:
-			npc->ani_no = 2;
-			break;
-
-		case 20:
-			npc->act_no = 21;
-			npc->act_wait = 64;
-			PlaySoundObject(29, SOUND_MODE_PLAY);
-			// Fallthrough
-		case 21:
-			if (--npc->act_wait == 0)
-				npc->cond = 0;
-
-			break;
-
-		case 50:
-			npc->act_no = 51;
-			npc->ani_no = 3;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 51:
-			if (++npc->ani_wait > 4)
-			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
-			}
-
-			if (npc->ani_no > 6)
-				npc->ani_no = 3;
-
-			if (npc->direct == 0)
-				npc->x -= 1 * 0x200;
-			else
-				npc->x += 1 * 0x200;
-
-			break;
-
-		case 60:
-			npc->act_no = 61;
-			npc->ani_no = 7;
-			npc->tgt_x = npc->x;
-			npc->tgt_y = npc->y;
-			// Fallthrough
-		case 61:
-			npc->tgt_y += 0x100;
-			npc->x = npc->tgt_x + (Random(-1, 1) * 0x200);
-			npc->y = npc->tgt_y + (Random(-1, 1) * 0x200);
-			break;
-
-		case 70:
-			npc->act_no = 71;
-			npc->act_wait = 0;
-			npc->ani_no = 3;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 71:
-			if (npc->direct == 0)
-				npc->x += 0x100;
-			else
-				npc->x -= 0x100;
-
-			if (++npc->ani_wait > 8)
-			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
-			}
-
-			if (npc->ani_no > 6)
-				npc->ani_no = 3;
-
-			break;
-
-		case 80:
-			npc->ani_no = 8;
-			break;
-
-		case 99:
-		case 100:
-			npc->act_no = 101;
-			npc->ani_no = 3;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 101:
-			npc->ym += 0x40;
-
-			if (npc->ym > 0x5FF)
-				npc->ym = 0x5FF;
-
-			if (npc->flag & 8)
-			{
-				npc->ym = 0;
-				npc->act_no = 102;
-			}
-
-			npc->y += npc->ym;
-			break;
-
-		case 102:
-			if (++npc->ani_wait > 8)
-			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
-			}
-
-			if (npc->ani_no > 6)
-				npc->ani_no = 3;
-
-			break;
-	}
-
-	if (npc->direct == 0)
-		npc->rect = rcLeft[npc->ani_no];
-	else
-		npc->rect = rcRight[npc->ani_no];
-
-	npc->rect.top += 32 * gMIMCurrentNum;
-	npc->rect.bottom += 32 * gMIMCurrentNum;
-
-	if (npc->act_no == 21)
-	{
-		npc->rect.bottom = npc->rect.top + (npc->act_wait / 4);
-
-		if (npc->act_wait / 2 % 2)
-			++npc->rect.left;
-	}
-
-	// Use a different sprite if the player is wearing the Mimiga Mask
-	// In theory this should be disabled by ENABLE_MIM_DISABLE_EQUIP_40_GRAPHICS, but the original mod doesn't do that (probably a bug tbh) so we don't do it either in order to make it so its behaviour is reproduced exactly with ENABLE_MIM_DISABLE_EQUIP_40_GRAPHICS
-	if (gMC.equip & EQUIP_MIMIGA_MASK)
-	{
-		npc->rect.top += 32;
-		npc->rect.bottom += 32;
-	}
+	// MOD: Rect uses formula based on ani_no (sprite row top=0xd0, bottom=0xf0)
+	npc->rect.left = (npc->ani_no - 1) * 0x20 + 0x30;
+	npc->rect.top = 0xd0;
+	npc->rect.right = npc->rect.left + 0x20;
+	npc->rect.bottom = 0xf0;
 }
 
 // Blue robot (standing)
@@ -1339,21 +1218,10 @@ void ActNpc151(NPCHAR *npc)
 }
 
 // Shutter stuck
+// MOD: ActNpc152 replaced with full Gaudi NPC behavior (delegates to ActNpc153)
 void ActNpc152(NPCHAR *npc)
 {
-	RECT rc = {0, 0, 0, 0};
-
-	switch (npc->act_no)
-	{
-		case 0:
-			if (npc->direct == 2)
-				npc->y += 16 * 0x200;
-
-			npc->act_no = 1;
-			break;
-	}
-
-	npc->rect = rc;
+	ActNpc153(npc);
 }
 
 const RECT grcKitL[21] = {

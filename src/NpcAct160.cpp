@@ -1332,8 +1332,18 @@ void ActNpc175(NPCHAR *npc)
 		{240, 80, 264, 104},
 	};
 
-	if (npc->act_no < 3 && npc->life < 90)
+	// MOD: Life threshold lowered from 90 to 50
+	if (npc->act_no < 3 && npc->life < 50)
 	{
+		// MOD: If NPC_EVENT_WHEN_TOUCHED flag (0x100) is set, spawn NPC 154 and trigger destroy effect
+		if (npc->bits & NPC_EVENT_WHEN_TOUCHED)
+		{
+			int spawn_y = (npc->bits & NPC_SPAWN_IN_OTHER_DIRECTION) ? npc->y : npc->y - 0x2000;
+			SetNpChar(0x9a, npc->x, spawn_y, 0, 0, 3, NULL, 0);
+			SetDestroyNpChar(npc->x, npc->y, npc->view.back, 48);
+			npc->exp = 0;
+		}
+		// MOD: Call new lose function (replaces LoseNpChar)
 		LoseNpChar(npc, FALSE);
 		npc->act_no = 10;
 		npc->ani_no = 1;
@@ -1384,6 +1394,7 @@ void ActNpc176(NPCHAR *npc)
 
 	if (npc->act_no < 3 && npc->life < 940)
 	{
+		// MOD: Call new lose function 0x493e45 instead of LoseNpChar
 		LoseNpChar(npc, FALSE);
 		npc->act_no = 10;
 		npc->ani_no = 2;

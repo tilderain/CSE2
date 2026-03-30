@@ -668,7 +668,7 @@ void ActNpc330(NPCHAR *npc)
 	switch (npc->act_no)
 	{
 		case 0:
-			ChangeMapParts(npc->x / 0x200 / 0x10, npc->y / 0x200 / 0x10, 0);
+			// MOD: ChangeMapParts call removed (nopped out)
 
 			if (npc->direct == 0)
 				npc->act_no = 10;

@@ -837,14 +837,21 @@ void ActNpc188(NPCHAR *npc)
 		case 1:
 			if (npc->pNpc->code_char == 187 && npc->pNpc->cond & 0x80)
 			{
+				// MOD: Save pNpc->damage to count2, and clear all bits except bit 2
+				npc->count2 = npc->pNpc->damage;
+				npc->bits &= 4;
 				deg = (npc->pNpc->count1 + npc->count1) % 0x100;
 				npc->x = npc->pNpc->x + (GetSin(deg) * 20);
 				npc->y = npc->pNpc->y + (GetCos(deg) * 0x20);
 			}
 			else
 			{
-				npc->xm = Random(-0x200, 0x200);
-				npc->ym = Random(-0x200, 0x200);
+				// MOD: Restore damage from count2, toggle NPC_SHOOTABLE and bit 0x8000
+				npc->damage = npc->count2;
+				npc->bits ^= 0x8020;
+				// MOD: Random velocity range widened from 0x200 to 0x600
+				npc->xm = Random(-0x600, 0x600);
+				npc->ym = Random(-0x600, 0x600);
 				npc->act_no = 10;
 			}
 
@@ -1311,6 +1318,7 @@ void ActNpc197(NPCHAR *npc)
 			if (npc->x < 48 * 0x200)
 			{
 				npc->destroy_voice = 0;
+				// MOD: Call new lose function 0x493e45 instead of LoseNpChar
 				LoseNpChar(npc, TRUE);
 			}
 

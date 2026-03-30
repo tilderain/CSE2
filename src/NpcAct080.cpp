@@ -711,17 +711,9 @@ void ActNpc085(NPCHAR *npc)
 // Missile
 void ActNpc086(NPCHAR *npc)
 {
-	RECT rect1[2] = {
-		{0, 80, 16, 96},
-		{16, 80, 32, 96},
-	};
-
-	RECT rect3[2] = {
-		{0, 112, 16, 128},
-		{16, 112, 32, 128},
-	};
-
-	RECT rcLast = {16, 0, 32, 16};
+	// MOD: Use code_event to set exp (item tier) if nonzero
+	if (npc->code_event != 0)
+		npc->exp = npc->code_event;
 
 	if (npc->direct == 0)
 	{
@@ -765,13 +757,27 @@ void ActNpc086(NPCHAR *npc)
 		npc->y += npc->ym;
 	}
 
-
-	int sprite_offset = npc->size; // Sourced from field 0x44
-	
-	npc->rect.left = sprite_offset;
-	npc->rect.right = sprite_offset + 16;
-	npc->rect.top = 80;
-	npc->rect.bottom = 96;
+	// MOD: Rect uses exp for tier-based top/bottom, and ani_no*16 for left/right
+	if (npc->exp < 11)
+	{
+		if (npc->exp < 3)
+		{
+			npc->rect.top = 0x50;
+			npc->rect.bottom = 0x60;
+		}
+		else
+		{
+			npc->rect.top = 0x60;
+			npc->rect.bottom = 0x70;
+		}
+	}
+	else
+	{
+		npc->rect.top = 0x70;
+		npc->rect.bottom = 0x80;
+	}
+	npc->rect.left = npc->ani_no * 0x10;
+	npc->rect.right = npc->rect.left + 0x10;
 
 	if (npc->direct == 0)
 		++npc->count1;
@@ -780,6 +786,13 @@ void ActNpc086(NPCHAR *npc)
 		npc->cond = 0;
 	if (npc->count1 > 500 && npc->count1 / 2 % 2)
 		npc->rect.right = 0;
+	if (npc->count1 > 547)
+	{
+		npc->rect.top = 0;
+		npc->rect.left = 0x10;
+		npc->rect.bottom = 0x10;
+		npc->rect.right = 0x20;
+	}
 }
 
 // Heart
@@ -961,9 +974,9 @@ void ActNpc088(NPCHAR *npc)
 				npc->ani_no = 2;
 
 			if (npc->direct == 0)
-				npc->xm = -0x200;
+				npc->xm = -0x300; // MOD: increased walk speed from -0x200
 			else
-				npc->xm = 0x200;
+				npc->xm = 0x300; // MOD: increased walk speed from 0x200
 
 			if (npc->count2)
 			{
@@ -978,7 +991,7 @@ void ActNpc088(NPCHAR *npc)
 			else if (npc->act_wait > 50)
 			{
 				npc->ani_no = 8;
-				npc->ym = -0x400;
+				npc->ym = -0x500; // MOD: increased jump height from -0x400
 				npc->act_no = 7;
 				npc->act_wait = 0;
 				npc->xm = (npc->xm * 3) / 2;
@@ -1071,7 +1084,8 @@ void ActNpc088(NPCHAR *npc)
 
 			// Fallthrough
 		case 10:
-			if (++npc->act_wait > 100 && npc->act_wait % 6 == 1)
+			// MOD: act_wait threshold lowered from 100 to 75, modulo changed from 6 to 3
+		if (++npc->act_wait > 75 && npc->act_wait % 3 == 1)
 			{
 				if (npc->direct == 0)
 					deg = 0x88;

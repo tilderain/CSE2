@@ -592,16 +592,17 @@ void ActNpc207(NPCHAR *npc)
 // Basu (destroyed Egg Corridor)
 void ActNpc208(NPCHAR *npc)
 {
+	// MOD: Sprite X coordinates shifted left by 80 pixels
 	RECT rcLeft[3] = {
-		{248, 80, 272, 104},
-		{272, 80, 296, 104},
-		{296, 80, 320, 104},
+		{168, 80, 192, 104},
+		{192, 80, 216, 104},
+		{216, 80, 240, 104},
 	};
 
 	RECT rcRight[3] = {
-		{248, 104, 272, 128},
-		{272, 104, 296, 128},
-		{296, 104, 320, 128},
+		{168, 104, 192, 128},
+		{192, 104, 216, 128},
+		{216, 104, 240, 128},
 	};
 
 	switch (npc->act_no)
@@ -756,11 +757,12 @@ void ActNpc209(NPCHAR *npc)
 	npc->y += npc->ym;
 	npc->x += npc->xm;
 
+	// MOD: Sprite coordinates updated to new sprite sheet row
 	RECT rect_left[4] = {
-		{232, 96, 248, 112},
-		{200, 112, 216, 128},
-		{216, 112, 232, 128},
-		{232, 112, 248, 128},
+		{296, 48, 312, 64},
+		{248, 48, 264, 64},
+		{280, 48, 296, 64},
+		{296, 48, 312, 64},
 	};
 
 	if (++npc->ani_wait > 2)
@@ -784,14 +786,15 @@ void ActNpc209(NPCHAR *npc)
 // Beetle (destroyed Egg Corridor)
 void ActNpc210(NPCHAR *npc)
 {
+	// MOD: Sprite Y coordinates shifted (112→224, 128→240)
 	RECT rcLeft[2] = {
-		{0, 112, 16, 128},
-		{16, 112, 32, 128},
+		{0, 224, 16, 240},
+		{16, 224, 32, 240},
 	};
 
 	RECT rcRight[2] = {
-		{32, 112, 48, 128},
-		{48, 112, 64, 128},
+		{32, 224, 48, 240},
+		{48, 224, 64, 240},
 	};
 
 	switch (npc->act_no)
@@ -803,7 +806,7 @@ void ActNpc210(NPCHAR *npc)
 				npc->ym = -0x200;
 				npc->tgt_y = npc->y;
 				npc->act_no = 1;
-				npc->damage = 2;
+				// MOD: damage assignment removed (nopped out)
 
 				if (npc->direct == 0)
 				{
@@ -820,7 +823,7 @@ void ActNpc210(NPCHAR *npc)
 			{
 				npc->bits &= ~NPC_SHOOTABLE;
 				npc->rect.right = 0;
-				npc->damage = 0;
+				// MOD: damage assignment removed (nopped out)
 				npc->xm = 0;
 				npc->ym = 0;
 				return;
