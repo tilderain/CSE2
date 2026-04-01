@@ -979,6 +979,9 @@ void ActNpc148(NPCHAR *npc)
 	}
 }
 
+
+#include "MycHit.h"
+
 // Moving block (horizontal)
 void ActNpc149(NPCHAR *npc)
 {
@@ -1014,7 +1017,7 @@ void ActNpc149(NPCHAR *npc)
 
 		// MOD: New cases 1-8: being carried by Curly
 		case 1:
-			if (JudgeHitMyCharNPC4(npc))
+		if (JudgeHitMyCharNPC4(npc))
 			{
 				npc->act_no = 2;
 				npc->ani_no = 2;
@@ -1150,12 +1153,11 @@ void ActNpc149(NPCHAR *npc)
 	ActNpc150(npc);
 }
 
-// Quote
-// MOD: Function completely replaced - now just clamps xm (with elite speed boost) and sets rect
+// Quote replacement
 void ActNpc150(NPCHAR *npc)
 {
-	// MOD: Elite flag (0x400) allows double speed limit
 	int xm_limit = (npc->bits & 0x400) ? 0x800 : 0x200;
+
 	if (npc->xm > xm_limit)
 		npc->xm = xm_limit;
 	if (npc->xm < -xm_limit)
@@ -1163,11 +1165,10 @@ void ActNpc150(NPCHAR *npc)
 
 	npc->x += npc->xm;
 
-	// MOD: Rect uses formula based on ani_no (sprite row top=0xd0, bottom=0xf0)
-	npc->rect.left = (npc->ani_no - 1) * 0x20 + 0x30;
-	npc->rect.top = 0xd0;
-	npc->rect.right = npc->rect.left + 0x20;
-	npc->rect.bottom = 0xf0;
+	npc->rect.left = (npc->ani_no - 1) * 32 + 48;
+	npc->rect.top = 208;
+	npc->rect.right = npc->rect.left + 32;
+	npc->rect.bottom = 240;
 }
 
 // Blue robot (standing)
@@ -1217,12 +1218,331 @@ void ActNpc151(NPCHAR *npc)
 		npc->rect = rcRight[npc->ani_no];
 }
 
-// Shutter stuck
-// MOD: ActNpc152 replaced with full Gaudi NPC behavior (delegates to ActNpc153)
+#include "Flags.h"
+
+
 void ActNpc152(NPCHAR *npc)
 {
-	ActNpc153(npc);
+	int rect_top = 208;
+	int rect_bottom = 224;
+	int rect_left, rect_right;
+
+	// Act 0: Initialization
+	// Maps 'Event #' from the editor to specific internal behavior modes
+	if (npc->act_no == 0)
+	{
+		int mode = 1;
+		switch (npc->code_event)
+		{
+			case 1: mode = 3; break;
+			case 2: mode = 4; break;
+			case 3: mode = 5; break;
+			case 4: mode = 6; break;
+			case 5: mode = 7; break;
+		}
+		npc->act_no = mode;
+	}
+
+	// Trigger Logic
+	// This block only runs if the NPC is not in its 70-frame cooldown (act_wait)
+	if (npc->act_wait == 0)
+	{
+		bool triggered = false;
+		int signal = npc->count2; // Signal usually passed from HitNpCharBullet
+
+		if (signal != 0)
+		{
+			// Mode-based filtering of the signal
+			if (npc->act_no == 3)
+			{
+				triggered = true; // Mode 1: Triggered by any signal
+			}
+			else if (npc->act_no == 4 && (signal == 13 || signal == 14 || signal == 15))
+			{
+				triggered = true; // Mode 2: Triggered only by specific Bullet IDs (e.g., Level 3 shots)
+			}
+			else if (npc->act_no == 5 && signal == 14)
+			{
+				triggered = true; // Mode 3: Triggered only by a very specific Bullet ID
+			}
+			else if (npc->act_no == 6 && signal != 0)
+			{
+				triggered = true; // Mode 4: Triggered by any signal
+			}
+			else if (npc->act_no == 7 && signal != 0)
+			{
+				triggered = true; // Mode 5: Triggered by any signal
+			}
+		}
+
+		if (triggered)
+		{
+			npc->act_wait = 70; // Set cooldown
+
+			// Toggle the Flag ID assigned in the editor (code_flag)
+			if (GetNPCFlag(npc->code_flag))
+				CutNPCFlag(npc->code_flag);
+			else
+				SetNPCFlag(npc->code_flag);
+
+			PlaySoundObject(103, SOUND_MODE_PLAY); // Play "Flag Toggled" sound
+		}
+		else
+		{
+			// LABEL_37: Standard non-triggered sprite calculation
+			rect_left = 16 * (npc->act_no - 1) + 208;
+			rect_right = rect_left + 16;
+			goto SetRect;
+		}
+	}
+
+	// Decrement cooldown timer
+	if (npc->act_wait > 0)
+		npc->act_wait--;
+
+	// Animation logic: Determine if we show the "Idle" or "Active/Blink" frame
+	// The blink occurs when ani_wait is between 1 and 4
+	if (--npc->ani_wait > 4)
+	{
+		// Standard Mode Sprite
+		rect_left = 16 * (npc->act_no - 1) + 208;
+		rect_right = rect_left + 16;
+	}
+	else
+	{
+		if (npc->ani_wait <= 0)
+			npc->ani_wait = 10;
+
+		// Blink Sprite (Frame used to indicate activity or "hit")
+		rect_left = 224;
+		rect_right = 240;
+	}
+
+SetRect:
+	// If direct is set, use the second row of the sprite sheet
+	if (npc->direct != 0)
+	{
+		rect_top = 224;
+		rect_bottom = 240;
+	}
+
+	npc->rect.left = rect_left;
+	npc->rect.top = rect_top;
+	npc->rect.right = rect_right;
+	npc->rect.bottom = rect_bottom;
+
+	// Important: Clear signal every frame so it doesn't re-trigger
+	npc->count2 = 0;
 }
+
+// NPC 152 (Switch/Flag toggle based on sub_4967E0)
+void ActNpc153(NPCHAR *npc)
+{
+    static const RECT rcLeft[21] = {
+        {0, 0, 24, 24},
+        {24, 0, 48, 24},
+        {48, 0, 72, 24},
+        {0, 24, 24, 48},
+        {72, 0, 96, 24},
+        {0, 0, 24, 24},
+        {96, 0, 120, 24},
+        {120, 0, 144, 24},
+        {144, 0, 168, 24},
+        {168, 0, 192, 24},
+        {192, 0, 216, 24},
+        {216, 0, 240, 24},
+        {240, 0, 264, 24},
+        {264, 0, 288, 24},
+        {0, 48, 24, 72},
+        {24, 48, 48, 72},
+        {48, 48, 72, 72},
+        {72, 48, 96, 72},
+        {288, 0, 312, 24},
+        {24, 48, 48, 72},
+        {96, 48, 120, 72},
+    };
+
+    static const RECT rcRight[21] = {
+        {0, 24, 24, 48},
+        {24, 24, 48, 48},
+        {48, 24, 72, 48},
+        {0, 0, 24, 24},
+        {72, 24, 96, 48},
+        {0, 24, 24, 48},
+        {96, 24, 120, 48},
+        {120, 24, 144, 48},
+        {144, 24, 168, 48},
+        {168, 24, 192, 48},
+        {192, 24, 216, 48},
+        {216, 24, 240, 48},
+        {240, 24, 264, 48},
+        {264, 24, 288, 48},
+        {0, 72, 24, 96},
+        {24, 72, 48, 96},
+        {48, 72, 72, 96},
+        {72, 72, 96, 96},
+        {288, 24, 312, 48},
+        {24, 72, 48, 96},
+        {96, 72, 120, 96},
+    };
+
+    // Range Check: Only process AI if within 1 screen width/height of the player
+    if (npc->x <= gMC.x + (320 * 0x200) &&
+        npc->x >= gMC.x - (320 * 0x200) &&
+        npc->y <= gMC.y + (240 * 0x200) &&
+        npc->y >= gMC.y - (240 * 0x200))
+    {
+        switch (npc->act_no)
+        {
+            case 0:
+                npc->act_no = 1;
+                npc->xm = 0;
+                npc->ani_no = 0;
+                npc->y += 3 * 0x200;
+                // Fallthrough
+            case 1:
+                if (Random(0, 100) == 1)
+                {
+                    npc->act_no = 2;
+                    npc->ani_no = 1;
+                    npc->act_wait = 0;
+                }
+
+                if (Random(0, 100) == 1)
+                {
+                    if (npc->direct == 0)
+                        npc->direct = 2;
+                    else
+                        npc->direct = 0;
+                }
+
+                if (Random(0, 100) == 1)
+                    npc->act_no = 10;
+                break;
+
+            case 2:
+                npc->act_wait++;
+                if (npc->act_wait > 20)
+                {
+                    npc->act_no = 1;
+                    npc->ani_no = 0;
+                }
+                break;
+
+            case 10:
+                npc->act_no = 11;
+                npc->act_wait = Random(25, 100);
+                npc->ani_no = 2;
+                npc->ani_wait = 0;
+                // Fallthrough
+            case 11:
+                npc->ani_wait++;
+                if (npc->ani_wait > 3)
+                {
+                    npc->ani_wait = 0;
+                    npc->ani_no++;
+                }
+
+                if (npc->ani_no > 5)
+                    npc->ani_no = 2;
+
+                if (npc->direct == 0)
+                    npc->xm = -0x200;
+                else
+                    npc->xm = 0x200;
+
+                if (npc->act_wait == 0)
+                {
+                    npc->act_no = 1;
+                    npc->ani_no = 0;
+                    npc->xm = 0;
+                }
+                else
+                {
+                    npc->act_wait--;
+                }
+
+                if (npc->direct == 0 && (npc->flag & 1))
+                {
+                    npc->ani_no = 2;
+                    npc->ym = -0x5FF;
+                    npc->act_no = 20;
+                    if (!(gMC.cond & 2))
+                        PlaySoundObject(30, SOUND_MODE_PLAY);
+                }
+                else if (npc->direct == 2 && (npc->flag & 4))
+                {
+                    npc->ani_no = 2;
+                    npc->ym = -0x5FF;
+                    npc->act_no = 20;
+                    if (!(gMC.cond & 2))
+                        PlaySoundObject(30, SOUND_MODE_PLAY);
+                }
+                break;
+
+            case 20:
+                if (npc->direct == 0 && (npc->flag & 1))
+                    npc->count1++;
+                else if (npc->direct == 2 && (npc->flag & 4))
+                    npc->count1++;
+                else
+                    npc->count1 = 0;
+
+                if (npc->count1 > 10)
+                {
+                    if (npc->direct == 0)
+                        npc->direct = 2;
+                    else
+                        npc->direct = 0;
+                }
+
+                if (npc->direct == 0)
+                    npc->xm = -0x100;
+                else
+                    npc->xm = 0x100;
+
+                if (npc->flag & 8)
+                {
+                    npc->act_no = 21;
+                    npc->ani_no = 20; // 0x14
+                    npc->act_wait = 0;
+                    npc->xm = 0;
+                    if (!(gMC.cond & 2))
+                        PlaySoundObject(23, SOUND_MODE_PLAY);
+                }
+                break;
+
+            case 21:
+                npc->act_wait++;
+                if (npc->act_wait > 10)
+                {
+                    npc->act_no = 1;
+                    npc->ani_no = 0;
+                }
+                break;
+        }
+    }
+
+    npc->ym += 0x40;
+    if (npc->ym > 0x5FF)
+        npc->ym = 0x5FF;
+
+    npc->x += npc->xm;
+    npc->y += npc->ym;
+
+    if (npc->direct == 0)
+        npc->rect = rcLeft[npc->ani_no];
+    else
+        npc->rect = rcRight[npc->ani_no];
+
+    // HP Threshold transform (51 = 0x33)
+    if (npc->life < 51)
+    {
+        npc->code_char = 154; // Transitions to Defeated/Boss phase
+        npc->act_no = 0;
+    }
+}
+
 
 const RECT grcKitL[21] = {
 	{0, 0, 24, 24},
@@ -1271,166 +1591,6 @@ const RECT grcKitR[21] = {
 	{24, 72, 48, 96},
 	{96, 72, 120, 96}
 };
-
-// Gaudi
-void ActNpc153(NPCHAR *npc)
-{
-	if (npc->x > gMC.x + (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->x < gMC.x - (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->y > gMC.y + (((WINDOW_HEIGHT / 2) + 120) * 0x200) || npc->y < gMC.y - (((WINDOW_HEIGHT / 2) + 120) * 0x200))
-		return;
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->xm = 0;
-			npc->ani_no = 0;
-			npc->y += 3 * 0x200;
-			// Fallthrough
-		case 1:
-			if (Random(0, 100) == 1)
-			{
-				npc->act_no = 2;
-				npc->ani_no = 1;
-				npc->act_wait = 0;
-			}
-
-			if (Random(0, 100) == 1)
-			{
-				if (npc->direct == 0)
-					npc->direct = 2;
-				else
-					npc->direct = 0;
-			}
-
-			if (Random(0, 100) == 1)
-				npc->act_no = 10;
-
-			break;
-
-		case 2:
-			if (++npc->act_wait > 20)
-			{
-				npc->act_no = 1;
-				npc->ani_no = 0;
-			}
-
-			break;
-
-		case 10:
-			npc->act_no = 11;
-			npc->act_wait = Random(25, 100);
-			npc->ani_no = 2;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 11:
-			if (++npc->ani_wait > 3)
-			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
-			}
-
-			if (npc->ani_no > 5)
-				npc->ani_no = 2;
-
-			if (npc->direct == 0)
-				npc->xm = -0x200;
-			else
-				npc->xm = 0x200;
-
-			if (npc->act_wait != 0)
-			{
-				--npc->act_wait;
-			}
-			else
-			{
-				npc->act_no = 1;
-				npc->ani_no = 0;
-				npc->xm = 0;
-			}
-
-			if (npc->direct == 0 && npc->flag & 1)
-			{
-				npc->ani_no = 2;
-				npc->ym = -0x5FF;
-				npc->act_no = 20;
-
-				if (!(gMC.cond & 2))
-					PlaySoundObject(30, SOUND_MODE_PLAY);
-			}
-			else if (npc->direct == 2 && npc->flag & 4)
-			{
-				npc->ani_no = 2;
-				npc->ym = -0x5FF;
-				npc->act_no = 20;
-
-				if (!(gMC.cond & 2))
-					PlaySoundObject(30, SOUND_MODE_PLAY);
-			}
-
-			break;
-
-		case 20:
-			if (npc->direct == 0 && npc->flag & 1)
-				++npc->count1;
-			else if (npc->direct == 2 && npc->flag & 4)
-				++npc->count1;
-			else
-				npc->count1 = 0;
-
-			if (npc->count1 > 10)
-			{
-				if (npc->direct == 0)
-					npc->direct = 2;
-				else
-					npc->direct = 0;
-			}
-
-			if (npc->direct == 0)
-				npc->xm = -0x100;
-			else
-				npc->xm = 0x100;
-
-			if (npc->flag & 8)
-			{
-				npc->act_no = 21;
-				npc->ani_no = 20;
-				npc->act_wait = 0;
-				npc->xm = 0;
-
-				if (!(gMC.cond & 2))
-					PlaySoundObject(23, SOUND_MODE_PLAY);
-			}
-
-			break;
-
-		case 21:
-			if (++npc->act_wait > 10)
-			{
-				npc->act_no = 1;
-				npc->ani_no = 0;
-			}
-
-			break;
-	}
-
-	npc->ym += 0x40;
-	if (npc->ym > 0x5FF)
-		npc->ym = 0x5FF;
-
-	npc->x += npc->xm;
-	npc->y += npc->ym;
-
-	if (npc->direct == 0)
-		npc->rect = grcKitL[npc->ani_no];
-	else
-		npc->rect = grcKitR[npc->ani_no];
-
-	if (npc->life <= 985)
-	{
-		npc->code_char = 154;
-		npc->act_no = 0;
-	}
-}
 
 // Gaudi (dead)
 void ActNpc154(NPCHAR *npc)

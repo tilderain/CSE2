@@ -222,7 +222,7 @@ BOOL LoadSoundObject(const char *file_name, int no)
 	return TRUE;
 }
 
-void PlaySoundObject(int no, SoundMode mode)
+void PlaySoundObject(int no, int mode)
 {
 	if (!audio_backend_initialised)
 		return;

@@ -952,10 +952,28 @@ void ActNpc031(NPCHAR *npc)
 // Life capsule
 void ActNpc032(NPCHAR *npc)
 {
-	RECT rect[2] = {
-		{32, 96, 48, 112},
-		{48, 96, 64, 112},
-	};
+	if (npc->count2 == 0)
+	{
+		npc->count2 = 1;
+
+		if (npc->code_flag > 5000)
+		{
+			if (npc->code_flag <= 5200)
+				npc->count2 = 2;
+			else if (npc->code_flag >= 5370 && npc->code_flag < 5400)
+				npc->count2 = 7;
+			else if (npc->code_flag <= 5449)
+				npc->count2 = 8;
+			else if (npc->code_flag >= 5450 && npc->code_flag <= 5459)
+				npc->count2 = 6;
+			else if (npc->code_flag <= 5499)
+				npc->count2 = 4;
+			else if (npc->code_flag <= 5599)
+				npc->count2 = 3;
+			else if (npc->code_flag <= 5699)
+				npc->count2 = 5;
+		}
+	}
 
 	if (++npc->ani_wait > 2)
 	{
@@ -965,6 +983,16 @@ void ActNpc032(NPCHAR *npc)
 
 	if (npc->ani_no > 1)
 		npc->ani_no = 0;
+
+	RECT rect[2];
+	rect[0].left = 0;
+	rect[0].top = npc->count2 * 16;
+	rect[0].right = 16;
+	rect[0].bottom = rect[0].top + 16;
+	rect[1].left = 16;
+	rect[1].top = npc->count2 * 16;
+	rect[1].right = 32;
+	rect[1].bottom = rect[1].top + 16;
 
 	npc->rect = rect[npc->ani_no];
 }

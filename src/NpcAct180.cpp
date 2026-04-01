@@ -421,273 +421,140 @@ void ActNpc181(NPCHAR *npc)
 		npc->rect = rcRight[npc->ani_no];
 }
 
-// Curly AI Polar Star
-void ActNpc182(NPCHAR *npc)
-{
-	RECT rcLeft[2] = {
-		{184, 152, 200, 168},
-		{200, 152, 216, 168},
-	};
+void ActNpc182(NPCHAR *npc) {}
+void ActNpc183(NPCHAR *npc) {}
+void ActNpc184(NPCHAR *npc) {}
 
-	RECT rcRight[2] = {
-		{184, 168, 200, 184},
-		{200, 168, 216, 184},
-	};
+#include "Map.h"
 
-	if (npc->pNpc == NULL)
-		return;
-
-	if (npc->pNpc->ani_no < 5)
-	{
-		if (npc->pNpc->direct == 0)
-		{
-			npc->direct = 0;
-			npc->x = npc->pNpc->x - (8 * 0x200);
-		}
-		else
-		{
-			npc->direct = 2;
-			npc->x = npc->pNpc->x + (8 * 0x200);
-		}
-
-		npc->y = npc->pNpc->y;
-		npc->ani_no = 0;
-	}
-	else
-	{
-		if (npc->pNpc->direct == 0)
-		{
-			npc->direct = 0;
-			npc->x = npc->pNpc->x;
-		}
-		else
-		{
-			npc->direct = 2;
-			npc->x = npc->pNpc->x;
-		}
-
-		npc->y = npc->pNpc->y - (10 * 0x200);
-		npc->ani_no = 1;
-	}
-
-	if (npc->pNpc->ani_no == 1 || npc->pNpc->ani_no == 3 || npc->pNpc->ani_no == 6 || npc->pNpc->ani_no == 8)
-		npc->y -= 1 * 0x200;
-
-	switch (npc->act_no)
-	{
-		case 0:
-			if (npc->pNpc->count2 == 10)
-			{
-				npc->pNpc->count2 = 0;
-				npc->act_no = 10;
-				npc->act_wait = 0;
-			}
-
-			break;
-
-		case 10:
-			if (++npc->act_wait % 12 == 1)
-			{
-				if (npc->ani_no == 0)
-				{
-					if (npc->direct == 0)
-					{
-						SetBullet(6, npc->x - (4 * 0x200), npc->y + (3 * 0x200), 0);
-						SetCaret(npc->x - (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
-					}
-					else
-					{
-						SetBullet(6, npc->x + (4 * 0x200), npc->y + (3 * 0x200), 2);
-						SetCaret(npc->x + (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
-					}
-				}
-				else
-				{
-					if (npc->direct == 0)
-					{
-						SetBullet(6, npc->x - (2 * 0x200), npc->y - (4 * 0x200), 1);
-						SetCaret(npc->x - (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
-					}
-					else
-					{
-						SetBullet(6, npc->x + (2 * 0x200), npc->y - (4 * 0x200), 1);
-						SetCaret(npc->x + (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
-					}
-				}
-			}
-
-			if (npc->act_wait == 60)
-				npc->act_no = 0;
-
-			break;
-	}
-
-	if (npc->direct == 0)
-		npc->rect = rcLeft[npc->ani_no];
-	else
-		npc->rect = rcRight[npc->ani_no];
-}
-
-// Curly Air Tank Bubble
-void ActNpc183(NPCHAR *npc)
-{
-	RECT rect[2] = {
-		{56, 96, 80, 120},
-		{80, 96, 104, 120},
-	};
-
-	if (npc->pNpc == NULL)
-		return;
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->x = npc->pNpc->x;
-			npc->y = npc->pNpc->y;
-			npc->act_no = 1;
-			break;
-	}
-
-	npc->x += (npc->pNpc->x - npc->x) / 2;
-	npc->y += (npc->pNpc->y - npc->y) / 2;
-
-	if (++npc->ani_wait > 1)
-	{
-		npc->ani_wait = 0;
-		++npc->ani_no;
-	}
-
-	if (npc->ani_no > 1)
-		npc->ani_no = 0;
-
-	if (npc->pNpc->flag & 0x100)
-		npc->rect = rect[npc->ani_no];
-	else
-		npc->rect.right = 0;
-}
-
-// Big Shutter
-void ActNpc184(NPCHAR *npc)
-{
-	int i;
-
-	RECT rc[4] = {
-		{0, 64, 32, 96},
-		{32, 64, 64, 96},
-		{64, 64, 96, 96},
-		{32, 64, 64, 96},
-	};
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->x += 8 * 0x200;
-			npc->y += 8 * 0x200;
-			break;
-
-		case 10:
-			npc->act_no = 11;
-			npc->ani_no = 1;
-			npc->act_wait = 0;
-			npc->bits |= NPC_IGNORE_SOLIDITY;
-			// Fallthrough
-		case 11:
-			switch (npc->direct)
-			{
-				case 0:
-					npc->x -= 0x80;
-					break;
-
-				case 1:
-					npc->y -= 0x80;
-					break;
-
-				case 2:
-					npc->x += 0x80;
-					break;
-
-				case 3:
-					npc->y += 0x80;
-					break;
-			}
-
-			if ((++npc->act_wait % 8) == 0)
-				PlaySoundObject(26, SOUND_MODE_PLAY);
-
-			SetQuake(20);
-			break;
-
-		case 20:
-			for (i = 0; i < 4; ++i)
-				SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (16 * 0x200), Random(-0x155, 0x155), Random(-0x600, 0), 0, NULL, 0x100);
-
-			npc->act_no = 1;
-			break;
-	}
-
-	if (++npc->ani_wait > 10)
-	{
-		npc->ani_wait = 0;
-		++npc->ani_no;
-	}
-
-	if (npc->ani_no > 3)
-		npc->ani_no = 0;
-
-	npc->rect = rc[npc->ani_no];
-}
-
-// Small Shutter
+// Small Shutter replacement
 void ActNpc185(NPCHAR *npc)
 {
-	RECT rc = {96, 64, 112, 96};
+    // Determine the target state based on the script flag
+    int flag_state = GetNPCFlag(npc->code_flag);
+    
+    // If bit 0x1000 (4096) is set, invert the open/closed logic
+    if (npc->bits & 0x1000)
+        flag_state ^= 1;
+	int tile_y;
+    switch (npc->act_no)
+    {
+        case 0:
+            if (npc->code_flag == 0)
+            {
+                npc->cond = 0;
+                break;
+            }
 
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->y += 8 * 0x200;
-			break;
+            // Note: The assembly sets count2 to 1 here if bit 0x100 is set, but it 
+            // gets unconditionally overwritten by the raycast below. Included for parity.
+            if (npc->bits & 0x100)
+                npc->count2 = 1;
 
-		case 10:
-			npc->act_no = 11;
-			npc->ani_no = 1;
-			npc->act_wait = 0;
-			npc->bits |= NPC_IGNORE_SOLIDITY;
-			// Fallthrough
-		case 11:
-			switch (npc->direct)
-			{
-				case 0:
-					npc->x -= 0x80;
-					break;
+            // Determine extension/retraction speed based on bit 0x400
+            if (npc->bits & 0x400)
+                npc->count1 = 1; // Fast
+            else
+                npc->count1 = 3; // Slow
 
-				case 1:
-					npc->y -= 0x80;
-					break;
+            // Determine initial visual state based on flag
+            if (flag_state == 1)
+            {
+                npc->act_no = 3;
+                npc->ani_no = 1;
+            }
+            else
+            {
+                npc->act_no = 1;
+                npc->ani_no = 0;
+            }
 
-				case 2:
-					npc->x += 0x80;
-					break;
+            // Raycast downward to find the floor (limit 16 tiles)
+            // x/y >> 13 is equivalent to x/y / 0x2000 (converts subpixels to tile coords)
+             tile_y = npc->y / 0x2000;
+            int i;
+            for (i = 0; i < 16; ++i)
+            {
+                unsigned char attr = GetAttribute(npc->x / 0x2000, ++tile_y);
+                
+                // Stop at solid block (0x05), spikes (0x18), or solid-water (0x41)
+                if (attr == 0x05 || attr == 0x18 || attr == 0x41)
+                    break;
+            }
 
-				case 3:
-					npc->y += 0x80;
-					break;
-			}
+            // count2 stores the total pixel length to the floor
+            npc->count2 = (tile_y * 0x2000) - npc->y;
+            
+            // Set collision bits: Solid (0x01) + Bouncy (0x02) + SolidTop (0x04) + SolidRear (0x40)
+            npc->bits |= 0x47;
+            npc->direct = 3;
 
-			++npc->act_wait;
-			break;
+            // If starting extended, set collision height immediately
+            if (npc->ani_no != 0)
+                npc->hit.bottom = npc->count2;
 
-		case 20:
-			npc->y -= 24 * 0x200;
-			npc->act_no = 1;
-			break;
-	}
+            break;
 
-	npc->rect = rc;
+        case 1: // Idle Retracted
+            if (npc->ani_no != flag_state)
+            {
+                npc->ani_no = flag_state;
+                npc->act_no = 2;
+                npc->act_wait = npc->count1;
+                PlaySoundObject(39, SOUND_MODE_PLAY);
+            }
+            break;
+
+        case 2: // Extending
+            npc->act_wait--;
+            if (npc->act_wait == 0)
+            {
+                PlaySoundObject(46, SOUND_MODE_PLAY);
+                npc->hit.bottom += 0x400; // Grow by 2 pixels
+
+                if (npc->hit.bottom >= npc->count2)
+                {
+                    npc->act_no = 3;
+                }
+                else
+                {
+                    npc->act_wait = npc->count1;
+                }
+            }
+            break;
+
+        case 3: // Idle Extended
+            if (npc->ani_no != flag_state)
+            {
+                npc->ani_no = flag_state;
+                npc->act_no = 4;
+                npc->act_wait = npc->count1;
+                PlaySoundObject(39, SOUND_MODE_PLAY);
+            }
+            break;
+
+        case 4: // Retracting
+            npc->act_wait--;
+            if (npc->act_wait == 0)
+            {
+                PlaySoundObject(46, SOUND_MODE_PLAY);
+                npc->hit.bottom -= 0x400; // Shrink by 2 pixels
+
+                if (npc->hit.bottom <= 0x1000) // Minimum 8 pixels
+                {
+                    npc->act_no = 1;
+                }
+                else
+                {
+                    npc->act_wait = npc->count1;
+                }
+            }
+            break;
+    }
+
+    // Synchronize the rendering view height to match the dynamic collision height
+    npc->view.bottom = npc->hit.bottom;
 }
-
 // Lift block
 void ActNpc186(NPCHAR *npc)
 {
@@ -748,80 +615,7 @@ void ActNpc186(NPCHAR *npc)
 	npc->rect = rc[npc->ani_no];
 }
 
-// Fuzz Core
-void ActNpc187(NPCHAR *npc)
-{
-	int i;
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->tgt_x = npc->x;
-			npc->tgt_y = npc->y;
-			npc->count1 = 120;
-			npc->act_wait = Random(0, 50);
-
-			for (i = 0; i < 5; ++i)
-				SetNpChar(188, 0, 0, 0, 0, 51 * i, npc, 0x100);
-			// Fallthrough
-		case 1:
-			if (++npc->act_wait < 50)
-				break;
-
-			npc->act_wait = 0;
-			npc->act_no = 2;
-			npc->ym = 0x300;
-			break;
-
-		case 2:
-			npc->count1 += 4;
-
-			if (gMC.x < npc->x)
-				npc->direct = 0;
-			else
-				npc->direct = 2;
-
-			if (npc->tgt_y < npc->y)
-				npc->ym -= 0x10;
-			if (npc->tgt_y > npc->y)
-				npc->ym += 0x10;
-
-			if (npc->ym > 0x355)
-				npc->ym = 0x355;
-			if (npc->ym < -0x355)
-				npc->ym = -0x355;
-
-			break;
-	}
-
-	npc->x += npc->xm;
-	npc->y += npc->ym;
-
-	RECT rect_left[2] = {
-		{224, 104, 256, 136},
-		{256, 104, 288, 136},
-	};
-
-	RECT rect_right[2] = {
-		{224, 136, 256, 168},
-		{256, 136, 288, 168},
-	};
-
-	if (++npc->ani_wait > 2)
-	{
-		npc->ani_wait = 0;
-		++npc->ani_no;
-	}
-
-	if (npc->ani_no > 1)
-		npc->ani_no = 0;
-
-	if (npc->direct == 0)
-		npc->rect = rect_left[npc->ani_no];
-	else
-		npc->rect = rect_right[npc->ani_no];
-}
+void ActNpc187(NPCHAR *npc) {}
 
 // Fuzz
 void ActNpc188(NPCHAR *npc)

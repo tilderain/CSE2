@@ -28,7 +28,7 @@ int gSuperYpos;
 
 const char* const gPassPixEve = "PXE";
 
-static void SetUniqueParameter(NPCHAR *npc)
+void SetUniqueParameter(NPCHAR *npc)
 {
 	int code = npc->code_char;
 	npc->surf = (SurfaceID)gNpcTable[code].surf;
@@ -344,6 +344,43 @@ void VanishNpChar(NPCHAR *npc)
 	SetUniqueParameter(npc);
 }
 
+void DrawNpc185(NPCHAR *npc, int fx, int fy)
+{
+    int i;
+    RECT rcShaft;
+    
+    // 1. Setup the Rect for the "Shaft" segments
+    // Decomp: v3 = 16 * a1->direct + 256;
+    int rect_x = 256 + (npc->direct * 16);
+    rcShaft.left = rect_x;
+    rcShaft.top = 160;
+    rcShaft.right = rect_x + 16;
+    rcShaft.bottom = 176;
+
+    // 2. The Tiling Loop (Draws the body of the pillar)
+    // Decomp: for ( i = a1->hit.bottom - 4096; i > 0; i -= 0x2000 )
+    // i starts 8 pixels up from the bottom and steps up 16 pixels at a time
+    for (i = npc->hit.bottom - 0x1000; i > 0; i -= 0x2000)
+    {
+        PutBitmap3(
+            &grcGame,
+            SubpixelToScreenCoord(npc->x - npc->view.back) - SubpixelToScreenCoord(fx),
+            SubpixelToScreenCoord(npc->y + i - npc->view.top) - SubpixelToScreenCoord(fy),
+            &rcShaft,
+            (SurfaceID)npc->surf // Surface 12
+        );
+    }
+
+    // 3. Prepare the "Head" Rect for the main loop
+    // This part is crucial: we modify the npc's rect so PutNpChar draws the head.
+    // Decomp: v7 = 16 * (a1->act_no % 2) + 16;
+    int head_y_offset = (16 * (npc->act_no % 2)) + 16;
+    
+    npc->rect.left = rect_x;
+    npc->rect.top = 160 + head_y_offset;
+    npc->rect.right = rect_x + 16;
+    npc->rect.bottom = 176 + head_y_offset;
+}
 void PutNpChar(int fx, int fy)
 {
 	int n;
@@ -367,6 +404,10 @@ void PutNpChar(int fx, int fy)
 					SetValueView(&gNPC[n].x, &gNPC[n].y, gNPC[n].damage_view);
 					gNPC[n].damage_view = 0;
 				}
+			}
+			if (gNPC[n].code_char == 185)
+			{
+				DrawNpc185(&gNPC[n], fx, fy);
 			}
 
 			if (gNPC[n].direct == 0)

@@ -886,7 +886,7 @@ void ActNpc049(NPCHAR *npc)
 	unsigned char deg;
 	int xm, ym;
 
-	if (npc->act_no >= 10 && npc->pNpc->code_char == 3)
+	if (npc->act_no >= 10 && npc->pNpc != NULL && npc->pNpc->code_char == 3)
 	{
 		npc->act_no = 3;
 		npc->xm = 0;
@@ -983,21 +983,9 @@ void ActNpc049(NPCHAR *npc)
 			}
 
 			if (npc->act_wait > 50)
-			{
-				npc->count1 = 0;
 				npc->act_no = 10;
-				npc->ani_no = 1;
-			}
 
 			break;
-	}
-
-	if (npc->act_no >= 10)
-	{
-		npc->x = npc->pNpc->x;
-		npc->y = npc->pNpc->y + (16 * 0x200);
-		npc->direct = npc->pNpc->direct;
-		--npc->pNpc->count1;
 	}
 
 	npc->ym += 0x40;
@@ -1008,15 +996,15 @@ void ActNpc049(NPCHAR *npc)
 	npc->y += npc->ym;
 
 	RECT rcLeft[3] = {
-		{0, 80, 32, 104},
-		{32, 80, 64, 104},
-		{64, 80, 96, 104},
+		{256, 192, 272, 216},
+		{272, 192, 288, 216},
+		{288, 192, 304, 216},
 	};
 
 	RECT rcRight[3] = {
-		{0, 104, 32, 128},
-		{32, 104, 64, 128},
-		{64, 104, 96, 128},
+		{256, 216, 272, 240},
+		{272, 216, 288, 240},
+		{288, 216, 304, 240},
 	};
 
 	if (npc->direct == 0)

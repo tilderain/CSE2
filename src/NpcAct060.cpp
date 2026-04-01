@@ -16,6 +16,8 @@
 #include "Sound.h"
 #include "Triangle.h"
 
+
+#include "Back.h"
 // Toroko
 void ActNpc060(NPCHAR *npc)
 {
@@ -1711,52 +1713,87 @@ void ActNpc075(NPCHAR *npc)
 // Flowers
 void ActNpc076(NPCHAR *npc)
 {
-	npc->rect.left = npc->code_event * 16;
-	npc->rect.top = 0;
-	npc->rect.right = npc->rect.left + 16;
-	npc->rect.bottom = 16;
-}
-
-// Yamashita
-void ActNpc077(NPCHAR *npc)
-{
-	RECT rc[3] = {
-		{0, 16, 48, 48},
-		{48, 16, 96, 48},
-		{96, 16, 144, 48},
-	};
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->ani_no = 0;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 1:
-			if (Random(0, 120) == 10)
-			{
-				npc->act_no = 2;
-				npc->act_wait = 0;
-				npc->ani_no = 1;
-			}
-
-			break;
-
-		case 2:
-			if (++npc->act_wait > 8)
-			{
-				npc->act_no = 1;
-				npc->ani_no = 0;
-			}
-
-			break;
-	}
+	if (npc->code_event != 0)
+		npc->exp = npc->code_event;
 
 	if (npc->direct == 0)
-		npc->rect = rc[npc->ani_no];
+	{
+		if (++npc->ani_wait > 2)
+		{
+			npc->ani_wait = 0;
+			++npc->ani_no;
+		}
+
+		if (npc->ani_no > 1)
+			npc->ani_no = 0;
+	}
+
+	if (gBack.type == 5 || gBack.type == 6)
+	{
+		if (npc->act_no == 0)
+		{
+			npc->act_no = 1;
+			npc->ym = Random(-0x20, 0x20);
+			npc->xm = Random(0x7F, 0x100);
+		}
+
+		npc->xm -= 8;
+
+		if (npc->x < 0xA000)
+			npc->cond = 0;
+
+		if (npc->x < -0x600)
+			npc->x = -0x600;
+
+		if (npc->flag & 1) npc->xm = 0x100;
+		if (npc->flag & 2) npc->ym = 0x40;
+		if (npc->flag & 8) npc->ym = -0x40;
+
+		npc->x += npc->xm;
+		npc->y += npc->ym;
+	}
+
+	if (npc->exp < 11)
+	{
+		if (npc->exp < 3)
+		{
+			npc->rect.top = 80;
+			npc->rect.bottom = 96;
+		}
+		else
+		{
+			npc->rect.top = 96;
+			npc->rect.bottom = 112;
+		}
+	}
 	else
-		npc->rect = rc[2];
+	{
+		npc->rect.top = 112;
+		npc->rect.bottom = 128;
+	}
+
+	npc->rect.left = npc->ani_no * 16;
+	npc->rect.right = npc->rect.left + 16;
+
+	if (npc->direct == 0)
+		npc->count1++;
+
+	if (npc->count1 > 550)
+		npc->cond = 0;
+
+	if (npc->count1 > 500)
+	{
+		if (npc->count1 / 2 % 2)
+		{
+			npc->rect.left = 0;
+			npc->rect.right = 0;
+		}
+	}
+}
+
+// Dummy NPC
+void ActNpc077(NPCHAR *npc)
+{
 }
 
 // Pot
@@ -1773,67 +1810,12 @@ void ActNpc078(NPCHAR *npc)
 		npc->rect = rc[1];
 }
 
-// Mahin
+// Log replacement (Mahin slot)
 void ActNpc079(NPCHAR *npc)
 {
-	RECT rcLeft[3] = {
-		{0, 0, 16, 16},
-		{16, 0, 32, 16},
-		{32, 0, 48, 16},
+	RECT rc[1] = {
+		{192, 48, 224, 64},
 	};
 
-	RECT rcRight[3] = {
-		{0, 16, 16, 32},
-		{16, 16, 32, 32},
-		{32, 16, 48, 32},
-	};
-
-	switch (npc->act_no)
-	{
-		case 0:
-			npc->act_no = 1;
-			npc->ani_no = 2;
-			npc->ani_wait = 0;
-			break;
-
-		case 2:
-			npc->ani_no = 0;
-
-			if (Random(0, 120) == 10)
-			{
-				npc->act_no = 3;
-				npc->act_wait = 0;
-				npc->ani_no = 1;
-			}
-
-			if (npc->x - (32 * 0x200) < gMC.x && npc->x + (32 * 0x200) > gMC.x && npc->y - (32 * 0x200) < gMC.y && npc->y + (16 * 0x200) > gMC.y)
-			{
-				if (npc->x > gMC.x)
-					npc->direct = 0;
-				else
-					npc->direct = 2;
-			}
-
-			break;
-
-		case 3:
-			if (++npc->act_wait > 8)
-			{
-				npc->act_no = 2;
-				npc->ani_no = 0;
-			}
-
-			break;
-	}
-
-	npc->ym += 0x40;
-	if (npc->ym > 0x5FF)
-		npc->ym = 0x5FF;
-
-	npc->y += npc->ym;
-
-	if (npc->direct == 0)
-		npc->rect = rcLeft[npc->ani_no];
-	else
-		npc->rect = rcRight[npc->ani_no];
+	npc->rect = rc[0];
 }

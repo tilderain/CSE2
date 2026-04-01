@@ -795,20 +795,11 @@ void ActNpc086(NPCHAR *npc)
 	}
 }
 
-// Heart
+// Crow replacement
 void ActNpc087(NPCHAR *npc)
 {
-	RECT rect2[2] = {
-		{32, 80, 48, 96},
-		{48, 80, 64, 96},
-	};
-
-	RECT rect6[2] = {
-		{64, 80, 80, 96},
-		{80, 80, 96, 96},
-	};
-
-	RECT rcLast = {16, 0, 32, 16};
+	if (npc->code_event != 0)
+		npc->exp = npc->code_event;
 
 	if (npc->direct == 0)
 	{
@@ -833,47 +824,56 @@ void ActNpc087(NPCHAR *npc)
 
 		npc->xm -= 8;
 
-		if (npc->x < 80 * 0x200)
+		if (npc->x < 0xA000)
 			npc->cond = 0;
 
-		if (npc->x < -3 * 0x200)
-			npc->x = -3 * 0x200;
+		if (npc->x < -0x600)
+			npc->x = -0x600;
 
-		if (npc->flag & 1)
-			npc->xm = 0x100;
-
-		if (npc->flag & 2)
-			npc->ym = 0x40;
-
-		if (npc->flag & 8)
-			npc->ym = -0x40;
+		if (npc->flag & 1) npc->xm = 0x100;
+		if (npc->flag & 2) npc->ym = 0x40;
+		if (npc->flag & 8) npc->ym = -0x40;
 
 		npc->x += npc->xm;
 		npc->y += npc->ym;
 	}
 
-	switch (npc->exp)
+	if (npc->exp < 11)
 	{
-		case 2:
-			npc->rect = rect2[npc->ani_no];
-			break;
-
-		case 6:
-			npc->rect = rect6[npc->ani_no];
-			break;
+		if (npc->exp < 3)
+		{
+			npc->rect.top = 80;
+			npc->rect.bottom = 96;
+		}
+		else
+		{
+			npc->rect.top = 96;
+			npc->rect.bottom = 112;
+		}
+	}
+	else
+	{
+		npc->rect.top = 112;
+		npc->rect.bottom = 128;
 	}
 
+	npc->rect.left = npc->ani_no * 16 + 32;
+	npc->rect.right = npc->rect.left + 16;
+
 	if (npc->direct == 0)
-		++npc->count1;
+		npc->count1++;
 
 	if (npc->count1 > 550)
 		npc->cond = 0;
 
-	if (npc->count1 > 500 && npc->count1 / 2 % 2)
-		npc->rect.right = 0;
-
-	if (npc->count1 > 547)
-		npc->rect = rcLast;
+	if (npc->count1 > 500)
+	{
+		if (npc->count1 / 2 % 2)
+		{
+			npc->rect.left = 0;
+			npc->rect.right = 0;
+		}
+	}
 }
 
 // Igor (boss)

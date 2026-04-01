@@ -458,173 +458,295 @@ void HitNpCharMap(void)
 	}
 }
 
+#include "ArmsItem.h"
+#include "NpcTbl.h"
+#include <cstring>
+#include "NpChar.h"
+// Check if a specific weapon (by code) has less than its maximum ammo
+bool IsAmmoNotFull(int code)
+{
+	for (int i = 0; i < 8; ++i)
+	{
+		// Look for the weapon code in the player's inventory
+		if (gArmsData[i].code == code)
+		{
+			// Return true if current ammo (num) is less than max ammo (max_num)
+			if (gArmsData[i].num < gArmsData[i].max_num)
+				return true;
+		}
+	}
+
+	return false;
+}
+
+bool SpawnSpecificAmmoDrop(int x, int y, int amount)
+{
+	int ammo_weapons[8];
+	int count = 0;
+
+	// Search inventory for Missile Launchers (ID 4)
+	for (int i = 0; i < 8; ++i)
+	{
+		if (gArmsData[i].code == 4 || gArmsData[i].code == 5) // Normal or Super Missile
+		{
+			ammo_weapons[count++] = gArmsData[i].code;
+		}
+	}
+
+	if (count == 0)
+		return false;
+
+	// Randomly pick one of the found ammo-consuming weapons
+	int target_weapon = ammo_weapons[Random(0, 10 * count) % count];
+
+	// Find an empty NPC slot for the drop (scanning reserved slots 256-512)
+	int slot = 256;
+	while (slot < 512 && gNPC[slot].cond & 0x80)
+		slot++;
+
+	if (slot == 512)
+		return false;
+
+	// Initialize the Ammo Pickup NPC (Type 76)
+	NPCHAR *drop = &gNPC[slot];
+	memset(drop, 0, sizeof(NPCHAR));
+	drop->cond = 0x80;
+	drop->code_char = 76; // Missile/Ammo pickup NPC type
+	drop->x = x;
+	drop->y = y;
+	drop->code_event = target_weapon;
+	drop->exp = amount;
+	
+	// Copy base parameters from the NPC table
+	drop->bits = gNpcTable[drop->code_char].bits;
+	
+	SetUniqueParameter(drop);
+
+	return true;
+}
 void LoseNpChar(NPCHAR *npc, BOOL bVanish)
 {
-	int val;
+	// 1. Play the destruction sound assigned to this NPC
+	PlaySoundObject(npc->destroy_voice, 1);
 
-	// Play death sound
-	PlaySoundObject(npc->destroy_voice, SOUND_MODE_PLAY);
-
-	// Create smoke
+	// 2. Spawn explosion particles based on size category
+	// count values (3, 7, 12) are standard for small, medium, and large effects
 	switch (npc->size)
 	{
 		case 1:
 			SetDestroyNpChar(npc->x, npc->y, npc->view.back, 3);
 			break;
-
 		case 2:
 			SetDestroyNpChar(npc->x, npc->y, npc->view.back, 7);
 			break;
-
 		case 3:
 			SetDestroyNpChar(npc->x, npc->y, npc->view.back, 12);
 			break;
 	}
 
-	// Create drop
+	// 3. Item Drop Logic
 	if (npc->exp != 0)
 	{
-		switch (Random(1, 5))
+		int ran = Random(1, 100);
+
+		if (ran <= 30) // 30% chance for Health
 		{
-			case 1:
-				// Spawn health
-				if (npc->exp > 6)
-					val = 6;
-				else
-					val = 2;
-
-				SetLifeObject(npc->x, npc->y, val);
-
-				break;
-
-			case 2:
-				// Spawn missile launcher ammo
-				if (npc->exp > 6)
-					val = 3;
-				else
-					val = 1;
-
-				if (SetBulletObject(npc->x, npc->y, val))
-					break;
-
-				// Fallthrough
-			default:
-				// Spawn weapon energy
+			// If player health is full, fallback to EXP
+			if (gMC.life >= gMC.max_life)
+			{
 				SetExpObjects(npc->x, npc->y, npc->exp);
-				break;
+			}
+			else
+			{
+				// Drop better hearts based on enemy's EXP value
+				if (npc->exp <= 10)
+					SetLifeObject(npc->x, npc->y, 2);
+				else if (npc->exp <= 25)
+					SetLifeObject(npc->x, npc->y, 6);
+				else
+					SetLifeObject(npc->x, npc->y, 18);
+			}
+		}
+		else if (ran <= 55) // 25% chance for Super Missile Ammo (Weapon 5)
+		{
+			if (IsAmmoNotFull(5))
+			{
+				// In the decomp, 'flag' was used, but this usually maps to 'exp' for drop quantity
+				int ammo_amount = (npc->exp <= 10) ? 2 : 5;
+				if (!SetBulletObject(npc->x, npc->y, ammo_amount))
+					SetExpObjects(npc->x, npc->y, npc->exp);
+			}
+			else
+			{
+				SetExpObjects(npc->x, npc->y, npc->exp);
+			}
+		}
+		else if (ran <= 85) // 30% chance for Normal Missile Ammo (Weapon 4)
+		{
+			if (IsAmmoNotFull(4))
+			{
+				// Calls sub_494090 which spawns the custom NPC 76 ammo drop
+				bool success;
+				if (npc->exp <= 15)
+					success = SpawnSpecificAmmoDrop(npc->x, npc->y, 25);
+				else
+					success = SpawnSpecificAmmoDrop(npc->x, npc->y, 100);
+
+				if (!success)
+					SetExpObjects(npc->x, npc->y, npc->exp);
+			}
+			else
+			{
+				SetExpObjects(npc->x, npc->y, npc->exp);
+			}
+		}
+		else // 15% chance for guaranteed EXP
+		{
+			SetExpObjects(npc->x, npc->y, npc->exp);
 		}
 	}
 
-	// Set flag
-	SetNPCFlag(npc->code_flag);
-
-	// Create value view
-	if (npc->bits & NPC_SHOW_DAMAGE)
+	// 4. Cleanup and Damage View
+	// If bit 0x8000 is set, show the floating damage text
+	if (npc->bits & 0x8000)
 	{
-		if ((npc->bits & NPC_SHOW_DAMAGE) && npc->damage_view)	// npc->bits & NPC_SHOW_DAMAGE is already verified at this point, so this is redundant
+		if (npc->damage_view != 0)
 			SetValueView(&npc->x, &npc->y, npc->damage_view);
+		
 		if (bVanish)
 			VanishNpChar(npc);
 	}
 	else
 	{
+		// Hard-delete the NPC by clearing its condition
 		npc->cond = 0;
 	}
 }
-
+#include "Boss.h"
 void HitNpCharBullet(void)
 {
-	int n, b;
-	BOOL bHit;
-
-	for (n = 0; n < NPC_MAX; ++n)
+	for (int i = 0; i < 512; ++i)
 	{
-		if (!(gNPC[n].cond & 0x80))
+		NPCHAR *npc = &gNPC[i];
+
+		// If NPC is inactive, or is shootable but has the "Invincible" bit (0x2000) set, skip it.
+		if (!(npc->cond & 0x80) || ((npc->bits & 0x20) && (npc->bits & 0x2000)))
 			continue;
 
-		if (gNPC[n].bits & NPC_SHOOTABLE && gNPC[n].bits & NPC_INTERACTABLE)
-			continue;
-
-		for (b = 0; b < BULLET_MAX; ++b)
+		for (int j = 0; j < 64; ++j)
 		{
-			if (!(gBul[b].cond & 0x80))
+			BULLET *bul = &gBul[j];
+
+			if (!(bul->cond & 0x80))
 				continue;
 
-			if (gBul[b].damage == -1)
+			// Check if the bullet is valid for hitting enemies (damage != -1)
+			if (bul->damage == -1)
 				continue;
 
-			// Check if bullet touches npc
-			bHit = FALSE;
-			if (gNPC[n].bits & NPC_SHOOTABLE
-				&& gNPC[n].x - gNPC[n].hit.back < gBul[b].x + gBul[b].enemyXL
-				&& gNPC[n].x + gNPC[n].hit.back > gBul[b].x - gBul[b].enemyXL
-				&& gNPC[n].y - gNPC[n].hit.top < gBul[b].y + gBul[b].enemyYL
-				&& gNPC[n].y + gNPC[n].hit.bottom > gBul[b].y - gBul[b].enemyYL)
-				bHit = TRUE;
-			else if (gNPC[n].bits & NPC_INVULNERABLE
-				&& gNPC[n].x - gNPC[n].hit.back < gBul[b].x + gBul[b].blockXL
-				&& gNPC[n].x + gNPC[n].hit.back > gBul[b].x - gBul[b].blockXL
-				&& gNPC[n].y - gNPC[n].hit.top < gBul[b].y + gBul[b].blockYL
-				&& gNPC[n].y + gNPC[n].hit.bottom > gBul[b].y - gBul[b].blockYL)
-				bHit = TRUE;
+			bool hit = false;
 
-			if (bHit)
+			// Collision check based on NPC shootable bits (0x20) or special solid shootable bits (0x04)
+			if (npc->bits & 0x20)
 			{
-				// Damage NPC
-				if (gNPC[n].bits & NPC_SHOOTABLE)
+				if (npc->x - npc->hit.back < bul->x + bul->enemyXL &&
+					npc->x + npc->hit.back > bul->x - bul->enemyXL &&
+					npc->y - npc->hit.top < bul->y + bul->enemyYL &&
+					npc->y + npc->hit.bottom > bul->y - bul->enemyYL)
 				{
-					gNPC[n].life -= gBul[b].damage;
+					hit = true;
+				}
+			}
+			else if (npc->bits & 0x04)
+			{
+				if (npc->x - npc->hit.back < bul->x + bul->blockXL &&
+					npc->x + npc->hit.back > bul->x - bul->blockXL &&
+					npc->y - npc->hit.top < bul->y + bul->blockYL &&
+					npc->y + npc->hit.bottom > bul->y - bul->blockYL)
+				{
+					hit = true;
+				}
+			}
 
-					if (gNPC[n].life < 1)
+			if (hit)
+			{
+				// If the NPC is standard shootable (0x20)
+				if (npc->bits & 0x20)
+				{
+					npc->life -= bul->damage;
+
+					if (npc->life > 0)
 					{
-						gNPC[n].life = 0;
+						// Play hit sound and show "tink" carets if not on a massive cooldown
+						if (npc->shock < 14)
+						{
+							for (int k = 0; k < 3; ++k)
+								SetCaret(bul->x, bul->y, 11, 0);
 
-						if (gNPC[n].bits & NPC_SHOW_DAMAGE)
-							gNPC[n].damage_view -= gBul[b].damage;
-
-						if ((gMC.cond & 0x80) && gNPC[n].bits & NPC_EVENT_WHEN_KILLED)
-							StartTextScript(gNPC[n].code_event);
-						else
-							gNPC[n].cond |= 8;
+							PlaySoundObject(npc->hit_voice, 1);
+							npc->shock = 16;
+						}
+						
+						// Handle Boss-Life linked NPCs (bit 0x8000)
+						if (npc->bits & 0x8000)
+							gBoss[0].life -= bul->damage;
 					}
 					else
 					{
-						if (gNPC[n].shock < 14)
-						{
-							SetCaret((gBul[b].x + gNPC[n].x) / 2, (gBul[b].y + gNPC[n].y) / 2, 11, 0);
-							SetCaret((gBul[b].x + gNPC[n].x) / 2, (gBul[b].y + gNPC[n].y) / 2, 11, 0);
-							SetCaret((gBul[b].x + gNPC[n].x) / 2, (gBul[b].y + gNPC[n].y) / 2, 11, 0);
-							PlaySoundObject(gNPC[n].hit_voice, SOUND_MODE_PLAY);
-							gNPC[n].shock = 16;
-						}
+						npc->life = 0;
+						if (npc->bits & 0x8000)
+							gBoss[0].life -= bul->damage;
 
-						if (gNPC[n].bits & NPC_SHOW_DAMAGE)
-							gNPC[n].damage_view -= gBul[b].damage;
+						// Trigger TSC if "Run Event on Death" bit (0x200) is set
+						if ((gMC.cond & 0x80) && (npc->bits & 0x200))
+							StartTextScript(npc->code_event);
+						else
+							npc->cond |= 8; // Mark for destruction
+					}
+
+					// Bullet health management (handling piercing/durability)
+					if (bul->life > 0)
+						bul->life--;
+				}
+				else // If it hit a non-shootable but solid part (invincible wall-like part)
+				{
+					// Specific Logic for Signal Listeners (NPC 152 / 303)
+					if (npc->code_char == 152)
+					{
+						if (npc->count2 == 0)
+							npc->count2 = bul->code_bullet; 
+					}
+					else if (npc->code_char == 303)
+					{
+						npc->count1 = 1; // Signal hit
+					}
+
+					// Bullet destruction/bouncing logic
+					if (!(bul->bbits & 0x10)) // If not a piercing bullet
+					{
+						if (!(bul->bbits & 0x08)) // If not a "no-vanish" bullet
+							bul->cond = 0;
+
+						// Weapon 07 (Bubbler) specific bounce
+						if (bul->code_bullet == 7)
+						{
+							bul->xm = -bul->xm;
+							bul->ym = -bul->ym;
+							PlaySoundObject(34, 1);
+						}
+						else
+						{
+							// Standard wall hit effect
+							SetCaret(bul->x, bul->y, 2, 2);
+							PlaySoundObject(28, 1);
+						}
 					}
 				}
-				else if (gBul[b].code_bullet == 13
-					|| gBul[b].code_bullet == 14
-					|| gBul[b].code_bullet == 15
-					|| gBul[b].code_bullet == 28
-					|| gBul[b].code_bullet == 29
-					|| gBul[b].code_bullet == 30)
-				{
-					// Strange empty case that's needed for accurate assembly
-				}
-				else if (!(gBul[b].bbits & 0x10))
-				{
-					// Hit invulnerable NPC
-					SetCaret((gBul[b].x + gNPC[n].x) / 2, (gBul[b].y + gNPC[n].y) / 2, 2, 2);
-					PlaySoundObject(31, SOUND_MODE_PLAY);
-					gBul[b].life = 0;
-					continue;
-				}
-
-				--gBul[b].life;
 			}
 		}
 
-		if (gNPC[n].cond & 8)
-			LoseNpChar(&gNPC[n], TRUE);
+		// If marked for death, run the death routine
+		if (npc->cond & 8)
+			LoseNpChar(npc, 1);
 	}
 }

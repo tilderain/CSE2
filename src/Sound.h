@@ -40,7 +40,7 @@ BOOL InitDirectSound(void);
 void EndDirectSound(void);
 BOOL InitSoundObject(const char *resname, int no);
 BOOL LoadSoundObject(const char *file_name, int no);
-void PlaySoundObject(int no, SoundMode mode);
+void PlaySoundObject(int no, int mode);
 void ChangeSoundFrequency(int no, unsigned long rate);
 void ChangeSoundVolume(int no, long volume);
 void ChangeSoundPan(int no, long pan);

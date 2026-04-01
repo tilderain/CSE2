@@ -131,3 +131,4 @@ void GetNpCharPosition(int *x, int *y, int i);
 BOOL IsNpCharCode(int code);
 BOOL GetNpCharAlive(int code_event);
 int CountAliveNpChar(void);
+void SetUniqueParameter(NPCHAR *npc);
