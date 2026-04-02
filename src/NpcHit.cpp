@@ -625,28 +625,26 @@ void LoseNpChar(NPCHAR *npc, BOOL bVanish)
 #include "Boss.h"
 void HitNpCharBullet(void)
 {
-	for (int i = 0; i < 512; ++i)
+	for (int n = 0; n < 512; ++n)
 	{
-		NPCHAR *npc = &gNPC[i];
+		NPCHAR *npc = &gNPC[n];
 
-		// If NPC is inactive, or is shootable but has the "Invincible" bit (0x2000) set, skip it.
+		// NPC must be active. 
+		// If NPC is shootable (0x20) and Invincible (0x2000), it's ignored by bullets.
 		if (!(npc->cond & 0x80) || ((npc->bits & 0x20) && (npc->bits & 0x2000)))
 			continue;
 
-		for (int j = 0; j < 64; ++j)
+		for (int b = 0; b < 64; ++b)
 		{
-			BULLET *bul = &gBul[j];
+			BULLET *bul = &gBul[b];
 
-			if (!(bul->cond & 0x80))
+			// Bullet must be active and have a valid damage value
+			if (!(bul->cond & 0x80) || bul->damage == -1)
 				continue;
 
-			// Check if the bullet is valid for hitting enemies (damage != -1)
-			if (bul->damage == -1)
-				continue;
+			bool bHit = false;
 
-			bool hit = false;
-
-			// Collision check based on NPC shootable bits (0x20) or special solid shootable bits (0x04)
+			// 1. Check Collision with Shootable NPCs
 			if (npc->bits & 0x20)
 			{
 				if (npc->x - npc->hit.back < bul->x + bul->enemyXL &&
@@ -654,9 +652,10 @@ void HitNpCharBullet(void)
 					npc->y - npc->hit.top < bul->y + bul->enemyYL &&
 					npc->y + npc->hit.bottom > bul->y - bul->enemyYL)
 				{
-					hit = true;
+					bHit = true;
 				}
 			}
+			// 2. Check Collision with Invulnerable/Solid parts
 			else if (npc->bits & 0x04)
 			{
 				if (npc->x - npc->hit.back < bul->x + bul->blockXL &&
@@ -664,89 +663,144 @@ void HitNpCharBullet(void)
 					npc->y - npc->hit.top < bul->y + bul->blockYL &&
 					npc->y + npc->hit.bottom > bul->y - bul->blockYL)
 				{
-					hit = true;
+					bHit = true;
 				}
 			}
 
-			if (hit)
+			if (bHit)
 			{
-				// If the NPC is standard shootable (0x20)
+				// --- BRANCH A: DAMAGEABLE NPC ---
 				if (npc->bits & 0x20)
 				{
 					npc->life -= bul->damage;
 
-					if (npc->life > 0)
+					if (npc->life >= 1)
 					{
-						// Play hit sound and show "tink" carets if not on a massive cooldown
+						// Hit reaction (jitter and carets)
 						if (npc->shock < 14)
 						{
-							for (int k = 0; k < 3; ++k)
-								SetCaret(bul->x, bul->y, 11, 0);
-
+							// Caret loop scales depending on NPC size
+							for (int k = npc->size + 1; k > 0; --k)
+							{
+								// Position caret halfway between bullet and NPC
+								SetCaret((bul->x + npc->x) / 2, (bul->y + npc->y) / 2, 11, 0);
+							}
 							PlaySoundObject(npc->hit_voice, 1);
 							npc->shock = 16;
 						}
-						
-						// Handle Boss-Life linked NPCs (bit 0x8000)
+
+						// Handle Boss-Life Link (Bit 0x8000)
+						// Note: Original writes to damage_view (+0xA0), NOT gBoss[0].life!
 						if (npc->bits & 0x8000)
-							gBoss[0].life -= bul->damage;
+							npc->damage_view -= bul->damage;
 					}
 					else
 					{
+						// Fatal Hit
 						npc->life = 0;
-						if (npc->bits & 0x8000)
-							gBoss[0].life -= bul->damage;
 
-						// Trigger TSC if "Run Event on Death" bit (0x200) is set
+						if (npc->bits & 0x8000)
+							npc->damage_view -= bul->damage;
+
+						// Run TSC Event if Flag 0x200 is set
 						if ((gMC.cond & 0x80) && (npc->bits & 0x200))
 							StartTextScript(npc->code_event);
 						else
-							npc->cond |= 8; // Mark for destruction
+							npc->cond |= 0x08; // Mark for CustomVanish
 					}
 
-					// Bullet health management (handling piercing/durability)
+					// Bullet health handling
 					if (bul->life > 0)
 						bul->life--;
+					
+					continue;
 				}
-				else // If it hit a non-shootable but solid part (invincible wall-like part)
+
+				// --- BRANCH B: INVULNERABLE NPC / SPECIAL LOGIC ---
+				
+				// 1. Magnetic Pickup Logic (Whimsical Star/Blade pull)
+				if (bul->code_bullet == 19)
 				{
-					// Specific Logic for Signal Listeners (NPC 152 / 303)
-					if (npc->code_char == 152)
+					if (npc->code_char == 76 || npc->code_char == 86 || npc->code_char == 87)
 					{
-						if (npc->count2 == 0)
-							npc->count2 = bul->code_bullet; 
+						npc->x = gMC.x;
+						npc->y = gMC.y;
+						goto hit_npc_bullet_special_npc_checks;
 					}
-					else if (npc->code_char == 303)
+				}
+				else if (bul->code_bullet == 30) 
+				{
+					// Earth ignores invulnerable bouncing logic entirely
+					goto hit_npc_bullet_special_npc_checks;
+				}
+				else if (npc->code_char == 76 || npc->code_char == 86 || npc->code_char == 87)
+				{
+					// XP/Health Pickups don't block projectiles
+					goto hit_npc_bullet_special_npc_checks;
+				}
+
+				// 4. Bullet Destruction/Bounce
+				if (!(bul->bbits & 0x10)) // If not piercing
+				{
+					if (!(bul->bbits & 0x08)) // If not indestructible
+						bul->cond = 0;
+
+					// Bubbler Bounce
+					if (bul->code_bullet == 7)
 					{
-						npc->count1 = 1; // Signal hit
+						bul->direct = (bul->direct == 0) ? 2 : 0;
+						bul->xm = -bul->xm;
+						bul->ym = -bul->ym;
+						PlaySoundObject(34, 1);
 					}
-
-					// Bullet destruction/bouncing logic
-					if (!(bul->bbits & 0x10)) // If not a piercing bullet
+					else if (bul->code_bullet == 8)
 					{
-						if (!(bul->bbits & 0x08)) // If not a "no-vanish" bullet
-							bul->cond = 0;
-
-						// Weapon 07 (Bubbler) specific bounce
-						if (bul->code_bullet == 7)
+						bul->cond = 0;
+					}
+					// Transition special projectiles to frame 15 (poof/dust ani_no)
+					else if (bul->code_bullet == 13 || bul->code_bullet == 14 || 
+							 bul->code_bullet == 15 || bul->code_bullet == 19 || 
+							 bul->code_bullet == 23 || bul->code_bullet == 26)
+					{
+						bul->ani_no = 15;
+					}
+					else
+					{
+						// Standard wall hit effect. The original game tests (bul->bbits & 0x10) 
+						// AGAIN here despite already failing the test earlier. Kept for accuracy.
+						if (bul->bbits & 0x10)
 						{
-							bul->xm = -bul->xm;
-							bul->ym = -bul->ym;
-							PlaySoundObject(34, 1);
+							bul->cond = 0;
+							SetCaret(bul->x, bul->y, 2, 1);
 						}
 						else
 						{
-							// Standard wall hit effect
 							SetCaret(bul->x, bul->y, 2, 2);
-							PlaySoundObject(28, 1);
 						}
+						PlaySoundObject(28, 1);
 					}
 				}
+
+			hit_npc_bullet_special_npc_checks:
+				// 2. Signal Listener Logic
+				if (npc->code_char == 152)
+				{
+					// Send the bullet ID to the trigger NPC
+					if (npc->count2 == 0)
+						npc->count2 = bul->code_bullet;
+				}
+				else if (npc->code_char == 303)
+				{
+					npc->shock = 1;
+				}
+
+				if (bul->life > 0)
+					bul->life--;
 			}
 		}
 
-		// If marked for death, run the death routine
+		// Run death routine if marked
 		if (npc->cond & 8)
-			LoseNpChar(npc, 1);
+			LoseNpChar(npc, 1); // Previously LoseNpChar(npc, 1). The mod has relocated this routine to 0x00493E45.
 	}
 }
