@@ -31,7 +31,6 @@ static void Vanish(BULLET *bul)
 
 int JudgeHitBulletBlock(int x, int y, BULLET *bul)
 {
-
 	int hit = 0;
 
 	// Check if bullet overlaps the block tile
@@ -48,18 +47,15 @@ int JudgeHitBulletBlock(int x, int y, BULLET *bul)
 	{
 		if (GetAttribute(x, y) == 0x43) // 0x43 is the Breakable Block attribute
 		{
-			// MOD: In Vanilla, this checked if it was NOT a piercing weapon 
-			// and destroyed the bullet (bul->cond = 0).
-			// The modder changed this to check IF it IS a piercing weapon
-			// and resets its count1 timer. Non-piercing weapons are no longer destroyed!
+			// Reset timer if it's a piercing weapon (Vanilla destroyed non-piercing weapons)
 			if (bul->bbits & 0x40)
 				bul->count1 = 0;
 
 			SetCaret(bul->x, bul->y, CARET_PROJECTILE_DISSIPATION, 0);
-			PlaySoundObject(12, SOUND_MODE_PLAY); // Block break sound
+			PlaySoundObject(12, 1); // Block break sound
 			
 			for (int i = 0; i < 4; i++)
-				SetNpChar(4, x * 0x2000, y * 0x2000, Random(-0x200, 0x200), Random(-0x200, 0x200), 0, NULL, 0);
+				SetNpChar(4, x * 0x2000, y * 0x2000, Random(-0x200, 0x200), Random(-0x200, 0x200), 0, NULL, 0x100);
 			
 			ShiftMapParts(x, y); // Break the block
 		}
@@ -80,7 +76,8 @@ int JudgeHitBulletBlock2(int x, int y, unsigned char *atrb, BULLET *bul)
 	{
 		for (i = 0; i < 4; ++i)
 		{
-			if (*atrb == 0x41 || *atrb == 0x61)
+			// Modded solid block check for piercing bullets
+			if (*atrb == 0x41 || *atrb == 0x46 || (*atrb >= 0x49 && *atrb <= 0x4F) || *atrb == 0x18 || (*atrb == 0x0A && bul->code_bullet != 19))
 				block[i] = TRUE;
 			else
 				block[i] = FALSE;
@@ -92,7 +89,8 @@ int JudgeHitBulletBlock2(int x, int y, unsigned char *atrb, BULLET *bul)
 	{
 		for (i = 0; i < 4; ++i)
 		{
-			if (*atrb == 0x41 || *atrb == 0x43 || *atrb == 0x61)
+			// Modded solid block check for normal bullets
+			if (*atrb == 0x41 || *atrb == 0x46 || *atrb == 0x43 || (*atrb >= 0x47 && *atrb <= 0x4F) || *atrb == 0x18 || (*atrb == 0x0A && bul->code_bullet != 19))
 				block[i] = TRUE;
 			else
 				block[i] = FALSE;
@@ -187,7 +185,7 @@ int JudgeHitBulletBlock2(int x, int y, unsigned char *atrb, BULLET *bul)
 	else
 	{
 		if (hit & 0xF)
-			Vanish(bul);
+			Vanish(bul); // The mod moved Vanish() to 0x494EA0 without changing its internal operation
 	}
 
 	return hit;
@@ -494,109 +492,110 @@ int FUN_00494770(int tx, int ty, BULLET *bul)
     return hit;
 }
 
+
 void HitBulletMap(void)
 {
-    for (int i = 0; i < BULLET_MAX; ++i)
-    {
-        if (!(gBul[i].cond & 0x80))
-            continue;
+	int i;
+	int j;
 
-        // Signed floor division — matches ASM arithmetic shift rounding
-        // equivalent to floor(x / 16) / 512 = floor(x / 8192)
-        int px = gBul[i].x;
-        int py = gBul[i].y;
-        int x = ((px >> 4) + ((px >> 4) < 0 ? 0x1ff : 0)) >> 9;
-        int y = ((py >> 4) + ((py >> 4) < 0 ? 0x1ff : 0)) >> 9;
+	int x, y;
+	int tx, ty;
+	unsigned char atrb[4];
+	int offx[4] = {0, 1, 0, 1};
+	int offy[4] = {0, 0, 1, 1};
 
-        // Surrounding tile offsets — order: TL, TR, BL, BR
-        // offx[] = {0,1,0,1}, offy[] = {0,0,1,1}
-        // stored as local_38[0..3] = offx, local_38[4..7] = offy
+	for (i = 0; i < BULLET_MAX; ++i)
+	{
+		if (gBul[i].cond & 0x80)
+		{
+			// Arithmetic Shift Right equivalent to properly support negative values
+			int px = gBul[i].x;
+			int py = gBul[i].y;
+			x = ((px >> 4) + ((px >> 4) < 0 ? 0x1ff : 0)) >> 9;
+			y = ((py >> 4) + ((py >> 4) < 0 ? 0x1ff : 0)) >> 9;
 
-        unsigned char atrb[4];
-        atrb[0] = GetAttribute(x,     y    );
-        atrb[1] = GetAttribute(x + 1, y    );
-        atrb[2] = GetAttribute(x,     y + 1);
-        atrb[3] = GetAttribute(x + 1, y + 1);
+			atrb[0] = GetAttribute(x, y);
+			atrb[1] = GetAttribute(x + 1, y);
+			atrb[2] = GetAttribute(x, y + 1);
+			atrb[3] = GetAttribute(x + 1, y + 1);
 
-        // offx[j] = j & 1, offy[j] = j >> 1
-        // i.e. j=0: (0,0), j=1: (1,0), j=2: (0,1), j=3: (1,1)
+			gBul[i].flag = 0;
 
-        gBul[i].flag = 0;
+			if (!(gBul[i].bbits & 4))
+			{
+				for (j = 0; j < 4; ++j)
+				{
+					if (!(gBul[i].cond & 0x80))
+						break;
 
-        if (gBul[i].bbits & 4)
-        {
-            // Ignore-wall flag set — skip per-tile collision,
-            // only run the full-block judge
-            gBul[i].flag |= JudgeHitBulletBlock2(x, y, atrb, &gBul[i]);
-        }
-        else
-        {
-            for (int j = 0; j < 4; ++j)
-            {
-                if (!(gBul[i].cond & 0x80))
-                    break;
+					tx = x + offx[j];
+					ty = y + offy[j];
 
-                int tx = x + (j & 1);
-                int ty = y + (j >> 1);
+					switch (atrb[j])
+					{
+						// Solid blocks
+						case 0x06: case 0x07: case 0x08: case 0x09:
+						case 0x59: case 0x5A: case 0x5B: case 0x5C:
+						case 0x5D: case 0x5E: case 0x5F:
+							gBul[i].flag |= JudgeHitBulletBlock(tx, ty, &gBul[i]);
+							continue;
 
-                switch (atrb[j])
-                {
-                    // Solid blocks
-                    case 0x06: case 0x07: case 0x08: case 0x09:
-                    case 0x59: case 0x5a: case 0x5b: case 0x5c:
-                    case 0x5d: case 0x5e: case 0x5f:
-                        gBul[i].flag |= JudgeHitBulletBlock(tx, ty, &gBul[i]);
-                        break;
+						case 0x10: case 0x50: case 0x70:
+							gBul[i].flag |= JudgeHitBulletTriangleA(tx, ty, &gBul[i]);
+							continue;
 
-                    // New slope type — FUN_00494770
-                    case 0x0a:
-                    case 0x43: case 0x47: case 0x48: case 0x49:
-                    case 0x4a: case 0x4b: case 0x4c: case 0x4d:
-                    case 0x4e: case 0x4f:
-                        FUN_00494770(tx, ty, &gBul[i]);
-                        gBul[i].flag |= gBul[i].flag;  // extraout_EAX — return via eax
-                        break;
+						case 0x11: case 0x51: case 0x71:
+							gBul[i].flag |= JudgeHitBulletTriangleB(tx, ty, &gBul[i]);
+							continue;
 
-                    // Triangle slopes A-H, each with 3 tile variants
-                    case 0x10: case 0x50: case 0x70:
-                        gBul[i].flag |= JudgeHitBulletTriangleA(tx, ty, &gBul[i]);
-                        break;
+						case 0x12: case 0x52: case 0x72:
+							gBul[i].flag |= JudgeHitBulletTriangleC(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x11: case 0x51: case 0x71:
-                        gBul[i].flag |= JudgeHitBulletTriangleB(tx, ty, &gBul[i]);
-                        break;
+						case 0x13: case 0x53: case 0x73:
+							gBul[i].flag |= JudgeHitBulletTriangleD(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x12: case 0x52: case 0x72:
-                        gBul[i].flag |= JudgeHitBulletTriangleC(tx, ty, &gBul[i]);
-                        break;
+						case 0x14: case 0x54: case 0x74:
+							gBul[i].flag |= JudgeHitBulletTriangleE(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x13: case 0x53: case 0x73:
-                        gBul[i].flag |= JudgeHitBulletTriangleD(tx, ty, &gBul[i]);
-                        break;
+						case 0x15: case 0x55: case 0x75:
+							gBul[i].flag |= JudgeHitBulletTriangleF(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x14: case 0x54: case 0x74:
-                        gBul[i].flag |= JudgeHitBulletTriangleE(tx, ty, &gBul[i]);
-                        break;
+						case 0x16: case 0x56: case 0x76:
+							gBul[i].flag |= JudgeHitBulletTriangleG(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x15: case 0x55: case 0x75:
-                        gBul[i].flag |= JudgeHitBulletTriangleF(tx, ty, &gBul[i]);
-                        break;
+						case 0x17: case 0x57: case 0x77:
+							gBul[i].flag |= JudgeHitBulletTriangleH(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x16: case 0x56: case 0x76:
-                        gBul[i].flag |= JudgeHitBulletTriangleG(tx, ty, &gBul[i]);
-                        break;
+						// Custom Hook Handler
+						case 0x0A: case 0x43: case 0x47: case 0x48:
+						case 0x49: case 0x4A: case 0x4B: case 0x4C:
+						case 0x4D: case 0x4E: case 0x4F:
+							gBul[i].flag |= FUN_00494770(tx, ty, &gBul[i]);
+							continue;
 
-                    case 0x17: case 0x57: case 0x77:
-                        gBul[i].flag |= JudgeHitBulletTriangleH(tx, ty, &gBul[i]);
-                        break;
+						// Certain attributes short-circuit tile evaluation directly to the bounding box judge
+						case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x1F:
+						case 0x41: case 0x46: case 0x58: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
+						case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
+						case 0x78: case 0x79: case 0x7A: case 0x7B: case 0x7C: case 0x7D: case 0x7E: case 0x7F:
+						case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85: case 0x86: case 0x87:
+						case 0x88: case 0x89: case 0x8A: case 0x8B: case 0x8C: case 0x8D: case 0x8E:
+							goto hit_block_2;
 
-                    // All other tiles (passthrough, water, etc.)
-                    // fall to default JudgeHitBulletBlock2 below
-                    default:
-                        gBul[i].flag |= JudgeHitBulletBlock2(x, y, atrb, &gBul[i]);
-                        break;
-                }
-            }
-        }
-    }
+						default:
+							continue;
+					}
+				}
+			}
+
+hit_block_2:
+			gBul[i].flag |= JudgeHitBulletBlock2(x, y, atrb, &gBul[i]);
+		}
+	}
 }
