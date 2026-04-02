@@ -1545,7 +1545,8 @@ void ActNpc015(NPCHAR *npc)
 // Save point
 void ActNpc016(NPCHAR *npc)
 {
-	int i;
+	// MOD: Force code_event to 10 (Save point event script)
+	npc->code_event = 10;
 
 	switch (npc->act_no)
 	{
@@ -1558,15 +1559,19 @@ void ActNpc016(NPCHAR *npc)
 				npc->bits &= ~NPC_INTERACTABLE;
 				npc->ym = -0x200;
 
-				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
+				for (int i = 0; i < 4; ++i)
+				{
+					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-1536, 0), 0, NULL, 0x100);
+				}
 			}
 			break;
+
 		case 1:
-			if (npc->flag & 8)
-				npc->bits |= NPC_INTERACTABLE;
 			break;
 	}
+
+	if (npc->flag & 8)
+		npc->bits |= NPC_INTERACTABLE;
 
 	if (++npc->ani_wait > 2)
 	{
@@ -1583,12 +1588,11 @@ void ActNpc016(NPCHAR *npc)
 
 	npc->y += npc->ym;
 
-	// MOD: Dynamic Rect Calculation (Replaces local array)
-	// Base X is 0x60 (96). Frame width is 16.
-	npc->rect.left = (npc->ani_no * 16) + 96; 
-	npc->rect.right = npc->rect.left + 16;
+	// MOD: Algorithmic rect calculation instead of using a static RECT array
 	npc->rect.top = 16;
 	npc->rect.bottom = 32;
+	npc->rect.left = (npc->ani_no * 16) + 96;
+	npc->rect.right = npc->rect.left + 16;
 }
 
 // Health refill
