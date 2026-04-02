@@ -679,7 +679,6 @@ void HitNpCharBullet(void)
 						// Hit reaction (jitter and carets)
 						if (npc->shock < 14)
 						{
-							// Caret loop scales depending on NPC size
 							for (int k = npc->size + 1; k > 0; --k)
 							{
 								// Position caret halfway between bullet and NPC
@@ -690,7 +689,6 @@ void HitNpCharBullet(void)
 						}
 
 						// Handle Boss-Life Link (Bit 0x8000)
-						// Note: Original writes to damage_view (+0xA0), NOT gBoss[0].life!
 						if (npc->bits & 0x8000)
 							npc->damage_view -= bul->damage;
 					}
@@ -709,7 +707,7 @@ void HitNpCharBullet(void)
 							npc->cond |= 0x08; // Mark for CustomVanish
 					}
 
-					// Bullet health handling
+					// Bullet health is ONLY decremented when hitting vulnerable NPCs
 					if (bul->life > 0)
 						bul->life--;
 					
@@ -725,21 +723,22 @@ void HitNpCharBullet(void)
 					{
 						npc->x = gMC.x;
 						npc->y = gMC.y;
-						goto hit_npc_bullet_special_npc_checks;
+						goto hit_npc_bullet_listener_checks;
 					}
 				}
-				else if (bul->code_bullet == 30) 
+				else if (bul->code_bullet == 13 || bul->code_bullet == 14 || bul->code_bullet == 15 || 
+						 bul->code_bullet == 28 || bul->code_bullet == 29 || bul->code_bullet == 30) 
 				{
-					// Earth ignores invulnerable bouncing logic entirely
-					goto hit_npc_bullet_special_npc_checks;
+					// High-level weapons bypass bounce/invulnerability logic completely
+					goto hit_npc_bullet_listener_checks;
 				}
 				else if (npc->code_char == 76 || npc->code_char == 86 || npc->code_char == 87)
 				{
-					// XP/Health Pickups don't block projectiles
-					goto hit_npc_bullet_special_npc_checks;
+					// XP/Health Pickups don't block normal projectiles
+					goto hit_npc_bullet_listener_checks;
 				}
 
-				// 4. Bullet Destruction/Bounce
+				// 2. Bullet Destruction/Bounce
 				if (!(bul->bbits & 0x10)) // If not piercing
 				{
 					if (!(bul->bbits & 0x08)) // If not indestructible
@@ -758,16 +757,13 @@ void HitNpCharBullet(void)
 						bul->cond = 0;
 					}
 					// Transition special projectiles to frame 15 (poof/dust ani_no)
-					else if (bul->code_bullet == 13 || bul->code_bullet == 14 || 
-							 bul->code_bullet == 15 || bul->code_bullet == 19 || 
-							 bul->code_bullet == 23 || bul->code_bullet == 26)
+					else if (bul->code_bullet == 19 || bul->code_bullet == 23 || bul->code_bullet == 26)
 					{
 						bul->ani_no = 15;
 					}
 					else
 					{
-						// Standard wall hit effect. The original game tests (bul->bbits & 0x10) 
-						// AGAIN here despite already failing the test earlier. Kept for accuracy.
+						// Standard wall hit effect
 						if (bul->bbits & 0x10)
 						{
 							bul->cond = 0;
@@ -781,8 +777,8 @@ void HitNpCharBullet(void)
 					}
 				}
 
-			hit_npc_bullet_special_npc_checks:
-				// 2. Signal Listener Logic
+			hit_npc_bullet_listener_checks:
+				// 3. Signal Listener Logic
 				if (npc->code_char == 152)
 				{
 					// Send the bullet ID to the trigger NPC
@@ -793,14 +789,11 @@ void HitNpCharBullet(void)
 				{
 					npc->shock = 1;
 				}
-
-				if (bul->life > 0)
-					bul->life--;
 			}
 		}
 
 		// Run death routine if marked
 		if (npc->cond & 8)
-			LoseNpChar(npc, 1); // Previously LoseNpChar(npc, 1). The mod has relocated this routine to 0x00493E45.
+			LoseNpChar(npc, 1);
 	}
 }
