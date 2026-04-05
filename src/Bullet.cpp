@@ -333,6 +333,39 @@ void InitBullet(void)
 		gBul[i].cond = 0;
 }
 
+// [Mod] Custom Replacement for CountArmsBullet
+// Instead of checking active bullets by their literal `code_bullet` (which ranges 
+// from 1 to 45), this custom routine mathematically calculates the base "Weapon ID"
+// from the bullet code.
+int CountWeaponShotOccurrences(int weapon_id)
+{
+	int count = 0;
+	int i;
+
+	for (i = 0; i < BULLET_MAX; ++i)
+	{
+		// If the bullet is currently active (cond & 0x80)
+		if (gBul[i].cond & 0x80)
+		{
+			// In vanilla Cave Story, every weapon has exactly 3 levels.
+			// Therefore, the bullet IDs for a weapon are grouped sequentially in threes.
+			// Example: 
+			// Snake Level 1 = 1, Level 2 = 2, Level 3 = 3
+			// Polar Star Level 1 = 4, Level 2 = 5, Level 3 = 6
+			// Fireball Level 1 = 7, Level 2 = 8, Level 3 = 9
+			//
+			// This math formula: (code_bullet + 2) / 3
+			// maps those 3-level groupings back down to a single base "Weapon ID".
+			// (e.g., bullets 4, 5, and 6 will all evaluate to Weapon ID 2).
+			
+			if ((gBul[i].code_bullet + 2) / 3 == weapon_id)
+				++count;
+		}
+	}
+
+	return count;
+}
+
 int CountArmsBullet(int arms_code)
 {
 	int i;

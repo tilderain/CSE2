@@ -131,6 +131,7 @@ void ShiftMapParts(int x, int y)
 	*(gMap.data + x + (y * gMap.width)) -= 1;
 }
 
+#include "Flags.h"
 BOOL ChangeMapParts(int x, int y, unsigned char no)
 {
 	int i;
@@ -141,11 +142,14 @@ BOOL ChangeMapParts(int x, int y, unsigned char no)
 	*(gMap.data + x + (y * gMap.width)) = no;
 
 	for (i = 0; i < 3; ++i)
-		SetNpChar(4, x * 0x200 * 0x10, y * 0x200 * 0x10, 0, 0, 0, NULL, 0);
+	{
+		// [Mod] Only spawn the smoke/explosion effect if Flag 7000 is NOT set
+		if (!GetNPCFlag(7000))
+			SetNpChar(4, x * 0x200 * 0x10, y * 0x200 * 0x10, 0, 0, 0, NULL, 0);
+	}
 
 	return TRUE;
 }
-
 void PutStage_Back(int fx, int fy)
 {
 	int i, j;
@@ -184,7 +188,7 @@ void PutStage_Back(int fx, int fy)
 
 void PutStage_Front(int fx, int fy)
 {
-	RECT rcSnack = {256, 48, 272, 64};
+	// RECT rcSnack = {256, 48, 272, 64}; // [Mod] Removed because we no longer draw the breakable block star
 	int i, j;
 	RECT rect;
 	int offset;
@@ -216,8 +220,12 @@ void PutStage_Front(int fx, int fy)
 
 			PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_LEVEL_TILESET);
 
+			// [Mod] The original code checks for attribute 0x43 and draws a breakable star on top. 
+			// This has been removed in the modded ASM.
+			/*
 			if (atrb == 0x43)
 				PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rcSnack, SURFACE_ID_NPC_SYM);
+			*/
 		}
 	}
 }
@@ -298,8 +306,8 @@ void PutMapDataVector(int fx, int fy)
 					rect.bottom = rect.top + 16;
 					break;
 			}
-
-			PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_CARET);
+			//MOD: draw from level tileset instead of caret ..
+			PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_LEVEL_TILESET);
 		}
 	}
 }

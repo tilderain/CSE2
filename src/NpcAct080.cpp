@@ -664,7 +664,6 @@ void ActNpc084(NPCHAR *npc)
 	}
 }
 
-// Terminal
 void ActNpc085(NPCHAR *npc)
 {
 	RECT rcLeft[3] = {
@@ -679,27 +678,24 @@ void ActNpc085(NPCHAR *npc)
 		{304, 96, 320, 120},
 	};
 
-	switch(npc->act_no)
+	if (npc->act_no == 0)
 	{
-		case 0:
-			npc->ani_no = 0;
+		npc->ani_no = 0;
 
-			// MOD: Changed check so player must be closely overlapping it.
-			// life threshold <= 2 instead of == 1
-			if (npc->x - (8 * 0x200) < gMC.x && npc->x + (8 * 0x200) > gMC.x && 
-			    npc->y - (16 * 0x200) < gMC.y && npc->y + (8 * 0x200) > gMC.y && 
-			    npc->life <= 2)
-			{
-				PlaySoundObject(43, SOUND_MODE_PLAY);
-				npc->act_no = 1;
-			}
-			break;
-
-		case 1:
-			if (++npc->ani_no > 2)
-				npc->ani_no = 1;
-
-			break;
+		// Turn on when the player gets close
+		if (npc->x - (8 * 0x200) < gMC.x && npc->x + (8 * 0x200) > gMC.x && 
+		    npc->y - (16 * 0x200) < gMC.y && npc->y + (8 * 0x200) > gMC.y)
+		{
+			PlaySoundObject(43, SOUND_MODE_PLAY);
+			npc->act_no = 1;
+		}
+	}
+	// [Mod] Changed from (npc->act_no == 1) to (npc->act_no <= 2). 
+	// This allows the terminal to keep animating its screen even if put into state 2 via a script.
+	else if (npc->act_no <= 2)
+	{
+		if (++npc->ani_no > 2)
+			npc->ani_no = 1;
 	}
 
 	if (npc->direct == 0)
@@ -707,7 +703,6 @@ void ActNpc085(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Missile
 void ActNpc086(NPCHAR *npc)
 {

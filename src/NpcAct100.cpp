@@ -1528,7 +1528,7 @@ void ActNpc117(NPCHAR *npc)
 		npc->rect = rcRight[npc->ani_no];
 }
 
-// Curly (boss)
+
 void ActNpc118(NPCHAR *npc)
 {
 	BOOL bUpper;
@@ -1702,7 +1702,9 @@ void ActNpc118(NPCHAR *npc)
 			break;
 	}
 
-	if (npc->act_no > 10 && npc->act_no < 30 && CountArmsBullet(6))
+	// [Mod] Changed weapon check from Machine Gun (4) to Missiles (6). 
+	// Uses a custom weapon counting wrapper (sub_494700) instead of vanilla CountArmsBullet.
+	if (npc->act_no > 10 && npc->act_no < 30 && CountWeaponShotOccurrences(6))
 	{
 		npc->act_wait = 0;
 		npc->act_no = 30;

@@ -1089,38 +1089,38 @@ void ActNpc252(NPCHAR *npc)
 // EXP capsule
 void ActNpc253(NPCHAR *npc)
 {
-	switch (npc->act_no)
+	RECT rc[2];
+
+	// [Mod] Animation speed increased: Frames advance every 3 frames instead of 5
+	if (++npc->ani_wait > 2)
 	{
-		case 0:
-			npc->act_no = 1;
-			// Fallthrough
-		case 1:
-			if (++npc->ani_wait > 4)
-			{
-				npc->ani_wait = 0;
-				++npc->ani_no;
-			}
-
-			if (npc->ani_no > 1)
-				npc->ani_no = 0;
-
-			break;
+		npc->ani_wait = 0;
+		++npc->ani_no;
 	}
 
-	if (npc->life <= 100)
-	{
-		SetExpObjects(npc->x, npc->y, npc->code_flag);
-		SetDestroyNpChar(npc->x, npc->y, npc->view.back, 8);
-		PlaySoundObject(25, SOUND_MODE_PLAY);
-		npc->cond = 0;
-	}
+	if (npc->ani_no > 1)
+		npc->ani_no = 0;
 
-	RECT rc[2] = {
-		{0, 64, 16, 80},
-		{16, 64, 32, 80},
-	};
+	// [Mod] Sprite selection based on flag bit 0x1000 (Bit 13)
+	// This allows the mod to use two different capsule appearances.
+	if (npc->bits & 0x1000)
+	{
+		// Set 2 (Elite / Alternate)
+		rc[0] = {32, 64, 48, 80};
+		rc[1] = {48, 64, 64, 80};
+	}
+	else
+	{
+		// Set 1 (Standard)
+		rc[0] = {0, 64, 16, 80};
+		rc[1] = {16, 64, 32, 80};
+	}
 
 	npc->rect = rc[npc->ani_no];
+
+	// [Mod] Breaking logic (SetExpObjects, SetDestroyNpChar, npc->cond = 0)
+	// has been completely removed from this function. 
+	// The state machine (act_no switch) has also been removed.
 }
 
 // Helicopter

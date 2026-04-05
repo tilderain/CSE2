@@ -329,14 +329,16 @@ void ActNpc162(NPCHAR *npc)
 // Dr Gero
 void ActNpc163(NPCHAR *npc)
 {
+	// [Mod] Modded coordinates: The horizontal column was shifted from 192 to 160 (0xA0).
+	// Vertical offsets (0 for Left, 16 for Right) remain the same as vanilla.
 	RECT rcLeft[2] = {
-		{192, 0, 208, 16},
-		{208, 0, 224, 16},
+		{160, 0, 176, 16},
+		{176, 0, 192, 16},
 	};
 
 	RECT rcRight[2] = {
-		{192, 16, 208, 32},
-		{208, 16, 224, 32},
+		{160, 16, 176, 32},
+		{176, 16, 192, 32},
 	};
 
 	switch (npc->act_no)
@@ -345,33 +347,34 @@ void ActNpc163(NPCHAR *npc)
 			npc->act_no = 1;
 			npc->ani_no = 0;
 			npc->ani_wait = 0;
-			// Fallthrough
+			// Fallthrough to Case 1
+			
 		case 1:
+			// Randomly trigger a blink animation
 			if (Random(0, 120) == 10)
 			{
 				npc->act_no = 2;
 				npc->act_wait = 0;
 				npc->ani_no = 1;
 			}
-
 			break;
 
 		case 2:
+			// Hold the blink frame (ani_no 1) for 8 frames
 			if (++npc->act_wait > 8)
 			{
 				npc->act_no = 1;
 				npc->ani_no = 0;
 			}
-
 			break;
 	}
 
+	// Set the source rectangle based on direction and animation frame
 	if (npc->direct == 0)
 		npc->rect = rcLeft[npc->ani_no];
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Nurse Hasumi
 void ActNpc164(NPCHAR *npc)
 {
@@ -1087,6 +1090,7 @@ void ActNpc173(NPCHAR *npc)
 		{72, 152, 96, 176},
 	};
 
+	// Proximity check for the "Action" phase
 	if (npc->x > gMC.x + (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->x < gMC.x - (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->y > gMC.y + (((WINDOW_HEIGHT / 2) + 120) * 0x200) || npc->y < gMC.y - (((WINDOW_HEIGHT / 2) + 120) * 0x200))
 		return;
 
@@ -1106,6 +1110,7 @@ void ActNpc173(NPCHAR *npc)
 			}
 			else
 			{
+				// Proximity check to initiate attack (192px horizontal, 160px vertical)
 				if (npc->x - (192 * 0x200) < gMC.x && npc->x + (192 * 0x200) > gMC.x && npc->y - (160 * 0x200) < gMC.y && npc->y + (160 * 0x200) > gMC.y)
 				{
 					npc->act_no = 10;
@@ -1208,15 +1213,17 @@ void ActNpc173(NPCHAR *npc)
 
 	npc->ym += 51;
 
+	// Always face the player
 	if (gMC.x < npc->x)
 		npc->direct = 0;
 	else
 		npc->direct = 2;
 
+	// Terminal velocity clamping
 	if (npc->ym > 0x5FF)
 		npc->ym = 0x5FF;
 	if (npc->ym < -0x5FF)
-		npc->ym = 0x5FF;
+		npc->ym = 0x5FF; // Verified: IDA shows ym = 1535 here too
 
 	npc->x += npc->xm;
 	npc->y += npc->ym;
@@ -1226,10 +1233,12 @@ void ActNpc173(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 
-	if (npc->life <= 985)
+	// [Mod] Death threshold lowered from 985 to 50
+	// This makes the boss stay in the fight longer.
+	if (npc->life <= 50)
 	{
 		SetDestroyNpChar(npc->x, npc->y, 0, 2);
-		npc->code_char = 154;
+		npc->code_char = 154; // Transform into NPC 154
 		npc->act_no = 0;
 	}
 }
@@ -1332,19 +1341,30 @@ void ActNpc175(NPCHAR *npc)
 		{240, 80, 264, 104},
 	};
 
-	// MOD: Life threshold lowered from 90 to 50
-	if (npc->act_no < 3 && npc->life < 50)
+	// [Mod] Life threshold lowered from 90 to 50
+	if (npc->act_no < 3 && npc->life <= 50)
 	{
-		// MOD: If NPC_EVENT_WHEN_TOUCHED flag (0x100) is set, spawn NPC 154 and trigger destroy effect
-		if (npc->bits & NPC_EVENT_WHEN_TOUCHED)
+		// [Mod] Check bit 0x100 (NPC_EVENT_WHEN_TOUCHED)
+		if (npc->bits & 0x100)
 		{
-			int spawn_y = (npc->bits & NPC_SPAWN_IN_OTHER_DIRECTION) ? npc->y : npc->y - 0x2000;
-			SetNpChar(0x9a, npc->x, spawn_y, 0, 0, 3, NULL, 0);
+			int spawn_y = npc->y;
+			
+			// [Mod] If bit 0x1000 is NOT set, offset the spawn upward
+			if (!(npc->bits & NPC_SPAWN_IN_OTHER_DIRECTION))
+				spawn_y -= 0x2000;
+
+			// Spawn Npc 154 (Gaud-family partner)
+			SetNpChar(154, npc->x, spawn_y, 0, 0, 3, NULL, 0);
+			
+			// Trigger large explosion effect
 			SetDestroyNpChar(npc->x, npc->y, npc->view.back, 48);
 			npc->exp = 0;
 		}
-		// MOD: Call new lose function (replaces LoseNpChar)
-		LoseNpChar(npc, FALSE);
+
+		// [Mod] Calls custom routine in code cave (replacing LoseNpChar)
+		// This likely handles a specific sound and object transformation.
+		LoseNpChar(npc, 0);
+
 		npc->act_no = 10;
 		npc->ani_no = 1;
 		npc->bits &= ~NPC_SHOOTABLE;
@@ -1359,11 +1379,13 @@ void ActNpc175(NPCHAR *npc)
 			break;
 	}
 
+	// Floating physics
 	if (npc->direct == 0)
 		npc->ym += 0x20;
 	else
 		npc->ym -= 0x20;
 
+	// Velocity clamping
 	if (npc->ym < -0x5FF)
 		npc->ym = -0x5FF;
 	if (npc->ym > 0x5FF)
@@ -1376,7 +1398,6 @@ void ActNpc175(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // BuyoBuyo Base
 void ActNpc176(NPCHAR *npc)
 {

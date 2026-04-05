@@ -317,104 +317,81 @@ void ActNpc180(NPCHAR *npc)
 // Curly AI Machine Gun
 void ActNpc181(NPCHAR *npc)
 {
+	// [Mod] All horizontal coordinates shifted left by 64 (0x40) 
+	// as per "sprite x -0x40" checklist item.
 	RECT rcLeft[2] = {
-		{216, 152, 232, 168},
-		{232, 152, 248, 168},
+		{152, 152, 168, 168},
+		{168, 152, 184, 168},
 	};
 
 	RECT rcRight[2] = {
-		{216, 168, 232, 184},
-		{232, 168, 248, 184},
+		{152, 168, 168, 184},
+		{168, 168, 184, 184},
 	};
 
 	if (npc->pNpc == NULL)
 		return;
 
+	// Attachment and Animation Logic
 	if (npc->pNpc->ani_no < 5)
 	{
-		if (npc->pNpc->direct == 0)
-		{
-			npc->direct = 0;
-			npc->x = npc->pNpc->x - (8 * 0x200);
-		}
-		else
-		{
-			npc->direct = 2;
-			npc->x = npc->pNpc->x + (8 * 0x200);
-		}
-
+		// Walking/Idle stance
+		npc->direct = (npc->pNpc->direct == 0) ? 0 : 2;
+		npc->x = (npc->direct == 0) ? npc->pNpc->x - (8 * 0x200) : npc->pNpc->x + (8 * 0x200);
 		npc->y = npc->pNpc->y;
 		npc->ani_no = 0;
 	}
 	else
 	{
-		if (npc->pNpc->direct == 0)
-		{
-			npc->direct = 0;
-			npc->x = npc->pNpc->x;
-		}
-		else
-		{
-			npc->direct = 2;
-			npc->x = npc->pNpc->x;
-		}
-
+		// Firing/Upper stance
+		npc->direct = (npc->pNpc->direct == 0) ? 0 : 2;
+		npc->x = npc->pNpc->x;
 		npc->y = npc->pNpc->y - (10 * 0x200);
 		npc->ani_no = 1;
 	}
 
+	// Visual "bobbing" while walking
 	if (npc->pNpc->ani_no == 1 || npc->pNpc->ani_no == 3 || npc->pNpc->ani_no == 6 || npc->pNpc->ani_no == 8)
 		npc->y -= 1 * 0x200;
 
 	switch (npc->act_no)
 	{
 		case 0:
+			// Wait for signal from parent to start shooting
 			if (npc->pNpc->count2 == 10)
 			{
 				npc->pNpc->count2 = 0;
 				npc->act_no = 10;
 				npc->act_wait = 0;
 			}
-
 			break;
 
 		case 10:
+			// Rapid fire sequence
 			if (++npc->act_wait % 6 == 1)
 			{
 				if (npc->ani_no == 0)
 				{
-					if (npc->direct == 0)
-					{
-						SetBullet(12, npc->x - (4 * 0x200), npc->y + (3 * 0x200), 0);
-						SetCaret(npc->x - (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
-					}
-					else
-					{
-						SetBullet(12, npc->x + (4 * 0x200), npc->y + (3 * 0x200), 2);
-						SetCaret(npc->x + (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
-					}
+					// Shooting Forward
+					int offset_x = (npc->direct == 0) ? -(4 * 0x200) : (4 * 0x200);
+					SetBullet(12, npc->x + offset_x, npc->y + (3 * 0x200), npc->direct);
+					SetCaret(npc->x + offset_x, npc->y + (3 * 0x200), 3, 0);
 				}
 				else
 				{
-					if (npc->direct == 0)
-					{
-						SetBullet(12, npc->x - (2 * 0x200), npc->y - (4 * 0x200), 1);
-						SetCaret(npc->x - (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
-					}
-					else
-					{
-						SetBullet(12, npc->x + (2 * 0x200), npc->y - (4 * 0x200), 1);
-						SetCaret(npc->x + (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
-					}
+					// Shooting Upward
+					int offset_x = (npc->direct == 0) ? -(2 * 0x200) : (2 * 0x200);
+					SetBullet(12, npc->x + offset_x, npc->y - (4 * 0x200), 1);
+					SetCaret(npc->x + offset_x, npc->y - (4 * 0x200), 3, 0);
 				}
 			}
 
 			if (npc->act_wait == 60)
 				npc->act_no = 0;
-
 			break;
 	}
 
+	// Render with new modded RECTs
 	if (npc->direct == 0)
 		npc->rect = rcLeft[npc->ani_no];
 	else
@@ -626,88 +603,90 @@ void ActNpc188(NPCHAR *npc)
 	{
 		case 0:
 			npc->act_no = 1;
+			// npc->direct is used to store the starting angle offset (0-255)
 			npc->count1 = npc->direct;
-			// Fallthrough
+			break;
+
 		case 1:
+			// [Mod] Check if parent (Droll) is alive and the correct ID (0xBB / 187)
 			if (npc->pNpc->code_char == 187 && npc->pNpc->cond & 0x80)
 			{
-				// MOD: Save pNpc->damage to count2, and clear all bits except bit 2
+				// [Mod] Read parent's current damage value into child's count2
+				// This allows the projectiles to inherit the boss's current power.
 				npc->count2 = npc->pNpc->damage;
+				
+				// [Mod] Bits logic: npc->bits &= 4 (Disables shootable/invuln, keeps only solid-bit)
 				npc->bits &= 4;
-				deg = (npc->pNpc->count1 + npc->count1) % 0x100;
-				npc->x = npc->pNpc->x + (GetSin(deg) * 20);
-				npc->y = npc->pNpc->y + (GetCos(deg) * 0x20);
+
+				// Orbit logic
+				deg = (unsigned char)(npc->pNpc->count1 + npc->count1);
+				npc->x = npc->pNpc->x + (GetSin(deg) * 20); // 0x14
+				npc->y = npc->pNpc->y + (GetCos(deg) * 32); // 0x20
 			}
 			else
 			{
-				// MOD: Restore damage from count2, toggle NPC_SHOOTABLE and bit 0x8000
+				// [Mod] Parent is dead: Child becomes an active threat
+				// Restore damage from saved count2 value
 				npc->damage = npc->count2;
+				
+				// [Mod] Toggle Bits: bits ^= 0x8020 (Toggles SHOOTABLE and Bit 15)
 				npc->bits ^= 0x8020;
-				// MOD: Random velocity range widened from 0x200 to 0x600
+
+				// [Mod] Scatter velocity significantly increased from ±0x200 to ±0x600
 				npc->xm = Random(-0x600, 0x600);
 				npc->ym = Random(-0x600, 0x600);
 				npc->act_no = 10;
 			}
-
 			break;
 
 		case 10:
-			if (gMC.x < npc->x)
-				npc->xm -= 0x20;
-			else
-				npc->xm += 0x20;
+			// Homing behavior (Accelerate towards player)
+			if (gMC.x < npc->x) npc->xm -= 0x20;
+			else npc->xm += 0x20;
 
-			if (gMC.y < npc->y)
-				npc->ym -= 0x20;
-			else
-				npc->ym += 0x20;
+			if (gMC.y < npc->y) npc->ym -= 0x20;
+			else npc->ym += 0x20;
 
-			if (npc->xm > 0x800)
-				npc->xm = 0x800;
-			if (npc->xm < -0x800)
-				npc->xm = -0x800;
+			// [Mod] Velocity clamping
+			if (npc->xm > 0x800) npc->xm = 0x800;
+			if (npc->xm < -0x800) npc->xm = -0x800;
 
-			if (npc->ym > 0x200)
-				npc->ym = 0x200;
-			if (npc->ym < -0x200)
-				npc->ym = -0x200;
+			if (npc->ym > 0x200) npc->ym = 0x200;
+			if (npc->ym < -0x200) npc->ym = -0x200;
 
 			npc->x += npc->xm;
 			npc->y += npc->ym;
-
 			break;
 	}
 
-	if (gMC.x < npc->x)
-		npc->direct = 0;
-	else
-		npc->direct = 2;
+	// [Mod] Always face the player
+	if (gMC.x < npc->x) npc->direct = 0;
+	else npc->direct = 2;
 
+	// Animation logic
 	if (++npc->ani_wait > 2)
 	{
 		npc->ani_wait = 0;
 		++npc->ani_no;
 	}
+	if (npc->ani_no > 1) npc->ani_no = 0;
 
-	if (npc->ani_no > 1)
-		npc->ani_no = 0;
-
-	RECT rect_left[2] = {
+	// [Mod] RECT Tables verified against ASM stack initialization
+	RECT rcLeft[2] = {
 		{288, 104, 304, 120},
 		{304, 104, 320, 120},
 	};
 
-	RECT rect_right[2] = {
+	RECT rcRight[2] = {
 		{288, 120, 304, 136},
 		{304, 120, 320, 136},
 	};
 
 	if (npc->direct == 0)
-		npc->rect = rect_left[npc->ani_no];
+		npc->rect = rcLeft[npc->ani_no];
 	else
-		npc->rect = rect_right[npc->ani_no];
+		npc->rect = rcRight[npc->ani_no];
 }
-
 // Unused homing flame object (possibly related to the Core?)
 void ActNpc189(NPCHAR *npc)
 {

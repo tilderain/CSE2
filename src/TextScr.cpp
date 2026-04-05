@@ -241,7 +241,8 @@ BOOL StartTextScript(int no)
 	gTS.item = 0;
 	gTS.offsetY = 0;
 
-	gMC.shock = 0;
+	//MOD: Kill invulnerability reset
+	//gMC.shock = 0;
 
 	gTS.rcText.left = TEXT_LEFT;
 	gTS.rcText.top = WINDOW_HEIGHT - 56;

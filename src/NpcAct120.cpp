@@ -448,21 +448,26 @@ void ActNpc124(NPCHAR *npc)
 }
 
 // Hidden item
+// Hidden item (Npc 125)
 void ActNpc125(NPCHAR *npc)
 {
-	if (npc->life < 990)
-	{
-		SetDestroyNpChar(npc->x, npc->y, npc->view.back, 8);
-		PlaySoundObject(70, SOUND_MODE_PLAY);
+	// [Mod] Modded ASM (jge 0x4401e6) causes the function to skip 
+	// the RECT assignment if the NPC hasn't been triggered yet.
+	if (npc->life >= 990)
+		return;
 
-		if (npc->direct == 0)
-			SetNpChar(87, npc->x, npc->y, 0, 0, 2, NULL, 0);
-		else
-			SetNpChar(86, npc->x, npc->y, 0, 0, 2, NULL, 0);
+	// Everything below here only happens once the NPC is shot/triggered
+	SetDestroyNpChar(npc->x, npc->y, npc->view.back, 8);
+	PlaySoundObject(70, SOUND_MODE_PLAY);
 
-		npc->cond = 0;
-	}
+	if (npc->direct == 0)
+		SetNpChar(87, npc->x, npc->y, 0, 0, 2, NULL, 0);
+	else
+		SetNpChar(86, npc->x, npc->y, 0, 0, 2, NULL, 0);
 
+	npc->cond = 0;
+
+	// This RECT block is what was skipped by the +0x7D offset jump
 	RECT rc[2] = {
 		{0, 96, 16, 112},
 		{16, 96, 32, 112},
@@ -1045,19 +1050,22 @@ void ActNpc133(NPCHAR *npc)
 		npc->rect = rcRight[npc->ani_no];
 }
 
-// Armadillo
+// Armadillo / Shovel Brigade Prisoner
 void ActNpc134(NPCHAR *npc)
 {
+	// [Mod] Sprite coordinates shifted according to hacks_extracted.txt (left=208, right=224)
+	// Original indices were 0 and 16. Modded are 208 and 224.
+	// Y-offsets are 256, 288, and 320.
 	RECT rcLeft[3] = {
-		{224, 0, 256, 16},
-		{256, 0, 288, 16},
-		{288, 0, 320, 16},
+		{208, 256, 224, 272},
+		{208, 288, 224, 304},
+		{208, 320, 224, 336},
 	};
 
 	RECT rcRight[3] = {
-		{224, 16, 256, 32},
-		{256, 16, 288, 32},
-		{288, 16, 320, 32},
+		{224, 256, 240, 272},
+		{224, 288, 240, 304},
+		{224, 320, 240, 336},
 	};
 
 	switch (npc->act_no)
@@ -1069,13 +1077,14 @@ void ActNpc134(NPCHAR *npc)
 			npc->bits |= NPC_INVULNERABLE;
 			// Fallthrough
 		case 1:
-			if (gMC.x > npc->x - (320 * 0x200) && gMC.x < npc->x + (320 * 0x200) && gMC.y > npc->y - (160 * 0x200) && gMC.y < npc->y + (64 * 0x200))	// TODO: Maybe do something about this for widescreen/tallscreen?
+			// Detection range: 320px wide, 160px up, 64px down
+			if (gMC.x > npc->x - (320 * 0x200) && gMC.x < npc->x + (320 * 0x200) && 
+			    gMC.y > npc->y - (160 * 0x200) && gMC.y < npc->y + (64 * 0x200))
 			{
 				npc->act_no = 10;
 				npc->bits |= NPC_SHOOTABLE;
 				npc->bits &= ~NPC_INVULNERABLE;
 			}
-
 			break;
 
 		case 10:
@@ -1088,17 +1097,17 @@ void ActNpc134(NPCHAR *npc)
 			if (npc->ani_no > 1)
 				npc->ani_no = 0;
 
-			if (npc->direct == 0 && npc->flag & 1)
-				npc->direct = 2;
-			if (npc->direct == 2 && npc->flag & 4)
-				npc->direct = 0;
+			if (npc->direct == 0 && npc->flag & 1) npc->direct = 2;
+			if (npc->direct == 2 && npc->flag & 4) npc->direct = 0;
 
 			if (npc->direct == 0)
 				npc->x -= 0x100;
 			else
 				npc->x += 0x100;
 
-			if (CountArmsBullet(6))
+			// [Mod] Use the custom weapon counter (sub_494700) to check for Missiles (ID 6)
+			// This checks for Level 1, 2, or 3 Missiles simultaneously.
+			if (CountWeaponShotOccurrences(6))
 			{
 				npc->act_no = 20;
 				npc->act_wait = 0;
@@ -1106,7 +1115,6 @@ void ActNpc134(NPCHAR *npc)
 				npc->bits &= ~NPC_SHOOTABLE;
 				npc->bits |= NPC_INVULNERABLE;
 			}
-
 			break;
 
 		case 20:
@@ -1118,7 +1126,6 @@ void ActNpc134(NPCHAR *npc)
 				npc->bits |= NPC_SHOOTABLE;
 				npc->bits &= ~NPC_INVULNERABLE;
 			}
-
 			break;
 	}
 
@@ -1133,25 +1140,29 @@ void ActNpc134(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Skeleton
 void ActNpc135(NPCHAR *npc)
 {
 	unsigned char deg;
 	int xm, ym;
 
+	// [Mod] Sprite coordinates shifted down by 32 pixels
 	RECT rcLeft[2] = {
-		{256, 32, 288, 64},
-		{288, 32, 320, 64},
-	};
-
-	RECT rcRight[2] = {
 		{256, 64, 288, 96},
 		{288, 64, 320, 96},
 	};
 
-	if (gMC.x < npc->x - (352 * 0x200) || gMC.x > npc->x + (352 * 0x200) || gMC.y < npc->y - (160 * 0x200) || gMC.y > npc->y + (64 * 0x200))
+	RECT rcRight[2] = {
+		{256, 96, 288, 128},
+		{288, 96, 320, 128},
+	};
+
+	// Detection/Despawn range
+	if (gMC.x < npc->x - (352 * 0x200) || gMC.x > npc->x + (352 * 0x200) || 
+	    gMC.y < npc->y - (160 * 0x200) || gMC.y > npc->y + (64 * 0x200))
+	{
 		npc->act_no = 0;
+	}
 
 	switch (npc->act_no)
 	{
@@ -1160,8 +1171,12 @@ void ActNpc135(NPCHAR *npc)
 			npc->xm = 0;
 			// Fallthrough
 		case 1:
-			if (gMC.x > npc->x - (320 * 0x200) && gMC.x < npc->x + (320 * 0x200) && gMC.y > npc->y - (160 * 0x200) && gMC.y < npc->y + (64 * 0x200))
+			// Trigger movement if player is in range
+			if (gMC.x > npc->x - (320 * 0x200) && gMC.x < npc->x + (320 * 0x200) && 
+			    gMC.y > npc->y - (160 * 0x200) && gMC.y < npc->y + (64 * 0x200))
+			{
 				npc->act_no = 10;
+			}
 
 			if (npc->flag & 8)
 				npc->ani_no = 0;
@@ -1182,31 +1197,36 @@ void ActNpc135(NPCHAR *npc)
 				npc->count1 = 0;
 				npc->ym = -0x200 * Random(1, 3);
 
+				// [Mod] Movement logic based on shock/hit status
 				if (npc->shock)
 				{
-					if (npc->x < gMC.x)
-						npc->xm -= 0x100;
-					else
+					// If hit, fly away from the player
+					if (npc->x >= gMC.x)
 						npc->xm += 0x100;
+					else
+						npc->xm -= 0x100;
 				}
 				else
 				{
-					if (npc->x < gMC.x)
-						npc->xm += 0x100;
-					else
+					// If not hit, fly toward the player
+					if (npc->x >= gMC.x)
 						npc->xm -= 0x100;
+					else
+						npc->xm += 0x100;
 				}
 			}
 
 			break;
 
 		case 20:
+			// [Mod] Fire a projectile (NPC 50) when reaching peak of jump
 			if (npc->ym > 0 && npc->count1 == 0)
 			{
 				++npc->count1;
 				deg = GetArktan(npc->x - gMC.x, npc->y + (4 * 0x200) - gMC.y);
 				ym = GetSin(deg) * 2;
 				xm = GetCos(deg) * 2;
+				// [Mod] SetNpChar parameter 8 changed to 384 (0x180)
 				SetNpChar(50, npc->x, npc->y, xm, ym, 0, NULL, 0x180);
 				PlaySoundObject(39, SOUND_MODE_PLAY);
 			}
@@ -1222,12 +1242,13 @@ void ActNpc135(NPCHAR *npc)
 
 	if (npc->act_no >= 10)
 	{
-		if (npc->x > gMC.x)
-			npc->direct = 0;
-		else
+		if (npc->x <= gMC.x)
 			npc->direct = 2;
+		else
+			npc->direct = 0;
 	}
 
+	// [Mod] Physics constants verified from IDA
 	npc->ym += 0x33;
 	if (npc->ym > 0x5FF)
 		npc->ym = 0x5FF;
@@ -1245,7 +1266,6 @@ void ActNpc135(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Puppy (carried)
 void ActNpc136(NPCHAR *npc)
 {

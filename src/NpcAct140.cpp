@@ -96,7 +96,6 @@ void ActNpc140(NPCHAR *npc)
 			break;
 
 		case 10:
-			npc->bits = npc->bits;	// Chances are this line isn't accurate to the original source code, but it produces the same assembly
 			npc->act_no = 11;
 			npc->ani_no = 0;
 			npc->ani_wait = 0;
@@ -118,7 +117,11 @@ void ActNpc140(NPCHAR *npc)
 			if (npc->ani_no > 1)
 				npc->ani_no = 0;
 
-			if (CountArmsBullet(6) || CountArmsBullet(3) > 3)
+			// [Mod] Igor jump-trigger updated.
+			// Vanilla checked for Machine Gun (4).
+			// Modded ASM (sub_494700) checks for Missiles (Weapon ID 6) or 
+			// if more than 3 Fireballs (Weapon ID 3) are on screen.
+			if (CountWeaponShotOccurrences(6) || CountWeaponShotOccurrences(3) > 3)
 				npc->act_no = 20;
 
 			if (npc->act_wait != 0)
@@ -983,49 +986,46 @@ void ActNpc148(NPCHAR *npc)
 #include "MycHit.h"
 
 // Moving block (horizontal)
+// Large Moving Block / Press (Redesign Version)
 void ActNpc149(NPCHAR *npc)
 {
 	int i;
+	int max_xm;
 
 	switch (npc->act_no)
 	{
 		case 0:
+			// Initialize position and solid bits
 			npc->x += 8 * 0x200;
 			npc->y += 8 * 0x200;
-
 			npc->bits |= NPC_SOLID_HARD;
 
-			// MOD: Check bits & 0x100 for initial state; if set, start in state 1 (carried)
-			if (!(npc->bits & 0x100))
-			{
-				npc->ani_no = 1;
-				if (npc->direct == 0)
-					npc->act_no = 10;
-				else
-					npc->act_no = 20;
-			}
-			else
+			// [Mod] Check bit 0x100 for "Carried/Dormant" state
+			if (npc->bits & 0x100)
 			{
 				npc->act_no = 1;
 				npc->ani_no = 3;
 			}
+			else
+			{
+				npc->ani_no = 1;
+				npc->act_no = (npc->direct == 0) ? 10 : 20;
+			}
 
 			npc->xm = 0;
 			npc->ym = 0;
-			ActNpc150(npc);
-			return;
+			break;
 
-		// MOD: New cases 1-8: being carried by Curly
 		case 1:
-		if (JudgeHitMyCharNPC4(npc))
+			// Being carried/stationary - wait for specific collision trigger
+			if (JudgeHitMyCharNPC4(npc))
 			{
 				npc->act_no = 2;
 				npc->ani_no = 2;
 				npc->count1 = 0;
 				SetQuake(30);
 			}
-			ActNpc150(npc);
-			return;
+			break;
 
 		case 2:
 		case 3:
@@ -1033,44 +1033,44 @@ void ActNpc149(NPCHAR *npc)
 		case 5:
 		case 6:
 		case 7:
+			// "Break free" animation sequence
 			if (++npc->count1 > 5)
 			{
 				npc->count1 = 0;
 				++npc->act_no;
 				PlaySoundObject(111, SOUND_MODE_PLAY);
 			}
-			ActNpc150(npc);
-			return;
+			break;
 
 		case 8:
+			// Sequence complete, start moving
 			npc->ani_no = 1;
 			npc->count1 = 0;
-			if (npc->direct == 0)
-				npc->act_no = 10;
-			else
-				npc->act_no = 20;
-			ActNpc150(npc);
-			return;
+			npc->act_no = (npc->direct == 0) ? 10 : 20;
+			break;
 
 		case 10:
+			// Waiting to move Left
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			// MOD: Added y proximity check
-			if (gMC.x < npc->x + 0x3200 && gMC.x > npc->x - 0x32000 && gMC.y < npc->y + 0x3200 && gMC.y > npc->y - 0x3200)
+			// Proximity detection box
+			if (gMC.x < npc->x + (25 * 0x200) && 
+			    gMC.x > npc->x - (400 * 0x200) && 
+			    gMC.y < npc->y + (25 * 0x200) && 
+			    gMC.y > npc->y - (25 * 0x200))
 			{
 				npc->act_no = 11;
 				npc->act_wait = 0;
 			}
-
-			ActNpc150(npc);
-			return;
+			break;
 
 		case 11:
+			// Moving Left
 			if (++npc->act_wait % 10 == 6)
 				PlaySoundObject(107, SOUND_MODE_PLAY);
 
-			if (npc->flag & 1)
+			if (npc->flag & 1) // Hit left wall
 			{
 				npc->xm = 0;
 				npc->direct = 2;
@@ -1079,46 +1079,47 @@ void ActNpc149(NPCHAR *npc)
 				PlaySoundObject(26, SOUND_MODE_PLAY);
 
 				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x - (16 * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
-
-				ActNpc150(npc);
-				return;
-			}
-
-			if (gMC.flag & 1)
-			{
-				npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 100;
+					SetNpChar(4, npc->x - 0x2000, npc->y + (Random(-12, 12) << 9), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 			}
 			else
 			{
-				npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 0;
+				// [Mod] Crush logic: Deal 100 damage if player is touching the left side
+				if (gMC.flag & 1)
+				{
+					npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 100;
+				}
+				else
+				{
+					npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 0;
+				}
+				npc->xm -= 32;
 			}
-
-			npc->xm -= 0x20;
-
 			break;
 
 		case 20:
+			// Waiting to move Right
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			// MOD: Added y proximity check
-			if (gMC.x > npc->x - 0x3200 && gMC.x < npc->x + 0x32000 && gMC.y < npc->y + 0x3200 && gMC.y > npc->y - 0x3200)
+			// Proximity detection box
+			if (gMC.x > npc->x - (25 * 0x200) && 
+			    gMC.x < npc->x + (400 * 0x200) && 
+			    gMC.y < npc->y + (25 * 0x200) && 
+			    gMC.y > npc->y - (25 * 0x200))
 			{
 				npc->act_no = 21;
 				npc->act_wait = 0;
 			}
-
-			ActNpc150(npc);
-			return;
+			break;
 
 		case 21:
+			// Moving Right
 			if (++npc->act_wait % 10 == 6)
 				PlaySoundObject(107, SOUND_MODE_PLAY);
 
-			if (npc->flag & 4)
+			if (npc->flag & 4) // Hit right wall
 			{
 				npc->xm = 0;
 				npc->direct = 0;
@@ -1127,30 +1128,41 @@ void ActNpc149(NPCHAR *npc)
 				PlaySoundObject(26, SOUND_MODE_PLAY);
 
 				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x + (16 * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
-
-				ActNpc150(npc);
-				return;
-			}
-
-			if (gMC.flag & 4)
-			{
-				npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 100;
+					SetNpChar(4, npc->x + 0x2000, npc->y + (Random(-12, 12) << 9), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 			}
 			else
 			{
-				npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 0;
+				// [Mod] Crush logic: Deal 100 damage if player is touching the right side
+				if (gMC.flag & 4)
+				{
+					npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 100;
+				}
+				else
+				{
+					npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 0;
+				}
+				npc->xm += 32;
 			}
-
-			npc->xm += 0x20;
-
 			break;
 	}
 
-	// MOD: Tail call to ActNpc150 to clamp xm and set rect
-	ActNpc150(npc);
+	// [Mod] Speed clamping logic from end of IDA output
+	max_xm = (npc->bits & 0x400) ? 0x800 : 0x200;
+
+	if (npc->xm > max_xm) npc->xm = max_xm;
+	if (npc->xm < -max_xm) npc->xm = -max_xm;
+
+	npc->x += npc->xm;
+
+	// [Mod] Custom RECT calculation from IDA output
+	// left = 32 * (ani_no - 1) + 48
+	int left_calc = 32 * (npc->ani_no - 1) + 48;
+	npc->rect.left = left_calc;
+	npc->rect.top = 208;
+	npc->rect.right = left_calc + 32;
+	npc->rect.bottom = 240;
 }
 
 // Quote replacement

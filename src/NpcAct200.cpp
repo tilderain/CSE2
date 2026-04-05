@@ -784,9 +784,10 @@ void ActNpc209(NPCHAR *npc)
 }
 
 // Beetle (destroyed Egg Corridor)
+
 void ActNpc210(NPCHAR *npc)
 {
-	// MOD: Sprite Y coordinates shifted (112→224, 128→240)
+	// [Mod] Sprite coordinates shifted vertically (112 -> 224, 128 -> 240)
 	RECT rcLeft[2] = {
 		{0, 224, 16, 240},
 		{16, 224, 32, 240},
@@ -800,38 +801,41 @@ void ActNpc210(NPCHAR *npc)
 	switch (npc->act_no)
 	{
 		case 0:
+			// Proximity check (16 pixels)
 			if (gMC.x < npc->x + (16 * 0x200) && gMC.x > npc->x - (16 * 0x200))
 			{
 				npc->bits |= NPC_SHOOTABLE;
 				npc->ym = -0x200;
 				npc->tgt_y = npc->y;
 				npc->act_no = 1;
-				// MOD: damage assignment removed (nopped out)
+
+				// [Mod] Damage assignment (originally npc->damage = 2) removed here
 
 				if (npc->direct == 0)
 				{
 					npc->x = gMC.x + (256 * 0x200);
-					npc->xm = -0x2FF;
+					npc->xm = -0x2FF; // 767
 				}
 				else
 				{
 					npc->x = gMC.x - (256 * 0x200);
-					npc->xm = 0x2FF;
+					npc->xm = 0x2FF; // 767
 				}
 			}
 			else
 			{
 				npc->bits &= ~NPC_SHOOTABLE;
 				npc->rect.right = 0;
-				// MOD: damage assignment removed (nopped out)
 				npc->xm = 0;
 				npc->ym = 0;
-				return;
+				// [Mod] Damage assignment (originally npc->damage = 0) removed here
+				return; // Early return matches IDA decompile
 			}
 
 			break;
 
 		case 1:
+			// Homing logic
 			if (npc->x > gMC.x)
 			{
 				npc->direct = 0;
@@ -843,21 +847,20 @@ void ActNpc210(NPCHAR *npc)
 				npc->xm += 0x10;
 			}
 
-			if (npc->xm > 0x2FF)
-				npc->xm = 0x2FF;
-			if (npc->xm < -0x2FF)
-				npc->xm = -0x2FF;
+			// Speed clamping
+			if (npc->xm > 0x2FF) npc->xm = 0x2FF;
+			if (npc->xm < -0x2FF) npc->xm = -0x2FF;
 
-			if (npc->y < npc->tgt_y)
-				npc->ym += 8;
-			else
+			// Hovering/Bobbing logic
+			if (npc->y >= npc->tgt_y)
 				npc->ym -= 8;
+			else
+				npc->ym += 8;
 
-			if (npc->ym > 0x200)
-				npc->ym = 0x200;
-			if (npc->ym < -0x200)
-				npc->ym = -0x200;
+			if (npc->ym > 0x200) npc->ym = 0x200;
+			if (npc->ym < -0x200) npc->ym = -0x200;
 
+			// [Mod] Physics slowdown when hit (shock flag)
 			if (npc->shock)
 			{
 				npc->x += npc->xm / 2;
@@ -872,6 +875,7 @@ void ActNpc210(NPCHAR *npc)
 			break;
 	}
 
+	// Rapid animation (frame changes every 2 frames)
 	if (++npc->ani_wait > 1)
 	{
 		npc->ani_wait = 0;
@@ -886,7 +890,6 @@ void ActNpc210(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
 // Spikes (small)
 void ActNpc211(NPCHAR *npc)
 {

@@ -60,3 +60,4 @@ void PutBullet(int fx, int fy);
 void SetBullet(int no, int x, int y, int dir);
 void ActBullet(void);
 BOOL IsActiveSomeBullet(void);
+int CountWeaponShotOccurrences(int weapon_id);

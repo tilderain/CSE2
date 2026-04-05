@@ -1349,6 +1349,7 @@ void ActNpc053(NPCHAR *npc)
 // Skullstep
 void ActNpc054(NPCHAR *npc)
 {
+	//MOD: change rect
 	RECT rcLeft[3] = {
 		{96, 80, 128, 104},
 		{128, 80, 160, 104},
