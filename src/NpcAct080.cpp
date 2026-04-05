@@ -103,23 +103,21 @@ void ActNpc080(NPCHAR *npc)
 			break;
 
 		case 3: // Swing Back
-			npc->xm = 0;
-			npc->act_wait++;
+		    npc->xm = 0;
+		    npc->act_wait++;
+			//Mod: scales with elite flag
+		    if ((!(npc->bits & 0x400) && npc->act_wait > 40) ||
+		         ((npc->bits & 0x400) && npc->act_wait > 9))
+		    {
+		        npc->act_wait = 0;
+		        npc->act_no = 4;
+		        npc->hit.front = 0x2400; // Extend forward hitbox for the smash
+		        PlaySoundObject(106, SOUND_MODE_PLAY);
+		        npc->damage <<= 3;
+		    }
+		    npc->ani_no = 4;
+		    break;
 
-			// MOD: Speed up swing if 0x400 is set
-			if ((!(npc->bits & 0x400) && npc->act_wait > 40) || 
-			     ((npc->bits & 0x400) && npc->act_wait > 9))
-			{
-				npc->act_wait = 0;
-				npc->act_no = 4;
-				npc->ym = 0x2400; // Heavy downward momentum for the smash
-				PlaySoundObject(106, SOUND_MODE_PLAY); // Smash sound
-
-				// MOD: Quadruple damage during the actual impact frame!
-				npc->damage <<= 3; 
-			}
-			npc->ani_no = 4;
-			break;
 
 		case 4: // Impact
 			npc->act_wait++;
@@ -131,21 +129,18 @@ void ActNpc080(NPCHAR *npc)
 			}
 			break;
 
-		case 5: // Recovery
-			npc->ani_no = 6;
-			npc->act_wait++;
+	case 5: // Recovery
+	    npc->ani_no = 6;
+	    npc->act_wait++;
 
-			// MOD: Recovery time scales with Elite flag
-			int recovery_limit = (npc->bits & 0x400) ? 6 : 21;
-			
-			if (npc->act_wait >= recovery_limit)
-			{
-				npc->act_no = 0;
-				npc->ym = 0;
-				// MOD: Restore normal damage value
-				npc->damage >>= 3; 
-			}
-			break;
+	    if ((!(npc->bits & 0x400) && npc->act_wait > 20) ||
+	         ((npc->bits & 0x400) && npc->act_wait > 5))
+	    {
+	        npc->act_no = 0;
+	        npc->hit.front = 0; // Retract hitbox
+	        npc->damage >>= 3;
+	    }
+	    break;
 	}
 
 	// Gravity and Wall Collision
