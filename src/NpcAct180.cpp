@@ -831,7 +831,7 @@ void ActNpc187(NPCHAR *npc)
 			SetNpChar(166, npc->x, npc->y, 0, 0, 0, NULL, 0x100);
 			
 			// FUN_00493e45 is a custom mod function (replaces LoseNpChar/VanishNpChar)
-			FUN_00493e45(npc, 1); 
+			LoseNpChar(npc, 1); 
 			
 			npc->cond = 0; // Destroy the core
 			return;        // Exit to prevent rect assignment
