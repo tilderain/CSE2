@@ -1165,22 +1165,193 @@ void ActNpc149(NPCHAR *npc)
 	npc->rect.bottom = 240;
 }
 
-// Quote replacement
+// Quote (NPC form)
 void ActNpc150(NPCHAR *npc)
 {
-	int xm_limit = (npc->bits & 0x400) ? 0x800 : 0x200;
+	int i;
 
-	if (npc->xm > xm_limit)
-		npc->xm = xm_limit;
-	if (npc->xm < -xm_limit)
-		npc->xm = -xm_limit;
+	static const RECT rcLeft[9] = {
+		{0, 0, 16, 16},    // 0: Idle
+		{48, 0, 64, 16},   // 1: Pain/Shock
+		{144, 0, 160, 16}, // 2: Teleporting
+		{16, 0, 32, 16},   // 3: Walk 1
+		{0, 0, 16, 16},    // 4: Walk 2
+		{32, 0, 48, 16},   // 5: Walk 3
+		{0, 0, 16, 16},    // 6: Walk 4
+		{160, 0, 176, 16}, // 7: Falling
+		{112, 0, 128, 16}, // 8: Lying down
+	};
 
-	npc->x += npc->xm;
+	static const RECT rcRight[9] = {
+		{0, 16, 16, 32},
+		{48, 16, 64, 32},
+		{144, 16, 160, 32},
+		{16, 16, 32, 32},
+		{0, 16, 16, 32},
+		{32, 16, 48, 32},
+		{0, 16, 16, 32},
+		{160, 16, 176, 32},
+		{112, 16, 128, 32},
+	};
 
-	npc->rect.left = (npc->ani_no - 1) * 32 + 48;
-	npc->rect.top = 208;
-	npc->rect.right = npc->rect.left + 32;
-	npc->rect.bottom = 240;
+	switch (npc->act_no)
+	{
+		case 0:
+			npc->act_no = 1;
+			npc->ani_no = 0;
+
+			if (npc->direct > 10)
+			{
+				npc->x = gMC.x;
+				npc->y = gMC.y;
+				npc->direct -= 10;
+			}
+			break;
+
+		case 2:
+			npc->ani_no = 1;
+			break;
+
+		case 10:
+			npc->act_no = 11;
+
+			for (i = 0; i < 4; ++i)
+				SetNpChar(4, npc->x, npc->y, Random(-0x155, 0x155), Random(-0x600, 0), 0, NULL, 0x100);
+
+			PlaySoundObject(71, SOUND_MODE_PLAY);
+			// Fallthrough
+		case 11:
+			npc->ani_no = 2;
+			break;
+
+		case 20:
+			npc->act_no = 21;
+			npc->act_wait = 64;
+			PlaySoundObject(29, SOUND_MODE_PLAY);
+			// Fallthrough
+		case 21:
+			if (--npc->act_wait == 0)
+				npc->cond = 0;
+
+			break;
+
+		case 50:
+			npc->act_no = 51;
+			npc->ani_no = 3;
+			npc->ani_wait = 0;
+			// Fallthrough
+		case 51:
+			if (++npc->ani_wait > 4)
+			{
+				npc->ani_wait = 0;
+				++npc->ani_no;
+			}
+
+			if (npc->ani_no > 6)
+				npc->ani_no = 3;
+
+			if (npc->direct == 0)
+				npc->x -= 0x200;
+			else
+				npc->x += 0x200;
+
+			break;
+
+		case 60:
+			npc->act_no = 61;
+			npc->ani_no = 7;
+			npc->tgt_x = npc->x;
+			npc->tgt_y = npc->y;
+			// Fallthrough
+		case 61:
+			// [MOD] Speed increased from 0x100 (0.5px) to 0x800 (4px)
+			npc->tgt_y += 0x800; 
+			npc->x = npc->tgt_x + (Random(-1, 1) * 0x200);
+			npc->y = npc->tgt_y + (Random(-1, 1) * 0x200);
+			break;
+
+		case 70:
+			npc->act_no = 71;
+			npc->act_wait = 0;
+			npc->ani_no = 3;
+			npc->ani_wait = 0;
+			// Fallthrough
+		case 71:
+			if (npc->direct == 0)
+				npc->x += 0x100;
+			else
+				npc->x -= 0x100;
+
+			if (++npc->ani_wait > 8)
+			{
+				npc->ani_wait = 0;
+				++npc->ani_no;
+			}
+
+			if (npc->ani_no > 6)
+				npc->ani_no = 3;
+
+			break;
+
+		case 80:
+			npc->ani_no = 8;
+			break;
+
+		case 99:
+		case 100:
+			npc->act_no = 101;
+			npc->ani_no = 3;
+			npc->ani_wait = 0;
+			// Fallthrough
+		case 101:
+			npc->ym += 0x40;
+
+			if (npc->ym > 0x5FF)
+				npc->ym = 0x5FF;
+
+			if (npc->flag & 8)
+			{
+				npc->ym = 0;
+				npc->act_no = 102;
+			}
+
+			npc->y += npc->ym;
+			break;
+
+		case 102:
+			if (++npc->ani_wait > 8)
+			{
+				npc->ani_wait = 0;
+				++npc->ani_no;
+			}
+
+			if (npc->ani_no > 6)
+				npc->ani_no = 3;
+
+			break;
+	}
+
+	if (npc->direct == 0)
+		npc->rect = rcLeft[npc->ani_no];
+	else
+		npc->rect = rcRight[npc->ani_no];
+
+	// Handle the dissolving effect (State 21)
+	if (npc->act_no == 21)
+	{
+		npc->rect.bottom = npc->rect.top + (npc->act_wait / 4);
+
+		// [MOD] New horizontal jitter effect added during dissolve
+		if ((npc->act_wait / 2) % 2)
+			npc->rect.left += 1;
+	}
+
+	// Use a different sprite set if wearing the Mimiga Mask
+	if (gMC.equip & EQUIP_MIMIGA_MASK)
+	{
+		npc->rect.top += 32;
+		npc->rect.bottom += 32;
+	}
 }
 
 // Blue robot (standing)
@@ -1666,35 +1837,40 @@ void ActNpc154(NPCHAR *npc)
 	else
 		npc->rect = grcKitR[npc->ani_no];
 }
-
-// Gaudi (flying)
+// Gaudi (flying) - NPC 155
 void ActNpc155(NPCHAR *npc)
 {
 	unsigned char deg;
 	int xm, ym;
 
-	if (npc->x > gMC.x + (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->x < gMC.x - (((WINDOW_WIDTH / 2) + 160) * 0x200) || npc->y > gMC.y + (((WINDOW_HEIGHT / 2) + 120) * 0x200) || npc->y < gMC.y - (((WINDOW_HEIGHT / 2) + 120) * 0x200))
+	// [MOD] Performance/Off-screen check
+	// If the NPC is more than one screen away from the player, skip AI processing
+	if (npc->x > gMC.x + (320 * 0x200) || npc->x < gMC.x - (320 * 0x200) || 
+	    npc->y > gMC.y + (240 * 0x200) || npc->y < gMC.y - (240 * 0x200))
+	{
 		return;
+	}
 
 	switch (npc->act_no)
 	{
 		case 0:
-			deg = Random(0, 0xFF);
+			// Initialize flight path using trigonometry
+			deg = (unsigned char)Random(0, 0xFF);
 			npc->xm = GetCos(deg);
-			deg += 0x40;
-			npc->tgt_x = npc->x + (GetCos(deg) * 8);
+			npc->tgt_x = npc->x + (GetCos(deg + 64) * 8);
 
-			deg = Random(0, 0xFF);
-			npc->ym = GetSin(deg);
-			deg += 0x40;
-			npc->tgt_y = npc->y + (GetSin(deg) * 8);
+			deg = (unsigned char)Random(0, 0xFF);
+			npc->ym = GetCos(deg); // ASM uses GetCos for both, resulting in a slightly different drift
+			npc->tgt_y = npc->y + (GetCos(deg + 64) * 8);
 
 			npc->act_no = 1;
 			npc->count1 = 120;
 			npc->act_wait = Random(70, 150);
 			npc->ani_no = 14;
 			// Fallthrough
+
 		case 1:
+			// Standard flight animation (Frames 14-15)
 			if (++npc->ani_no > 15)
 				npc->ani_no = 14;
 
@@ -1704,76 +1880,75 @@ void ActNpc155(NPCHAR *npc)
 			}
 			else
 			{
+				// Switch to shooting prep
 				npc->act_no = 2;
 				npc->ani_no = 18;
 			}
-
 			break;
 
 		case 2:
+			// Shooting animation (Frames 18-19)
 			if (++npc->ani_no > 19)
 				npc->ani_no = 18;
 
 			if (++npc->act_wait > 30)
 			{
+				// Aim at player
 				deg = GetArktan(npc->x - gMC.x, npc->y - gMC.y);
-				deg += (unsigned char)Random(-6, 6);
+				deg += (unsigned char)Random(-6, 6); // Add slight inaccuracy
+				
 				ym = GetSin(deg) * 3;
 				xm = GetCos(deg) * 3;
+
 				SetNpChar(156, npc->x, npc->y, xm, ym, 0, NULL, 0x100);
 
-				if (!(gMC.cond & 2))
+				if (!(gMC.cond & 2)) // Play sound only if player isn't hidden
 					PlaySoundObject(39, SOUND_MODE_PLAY);
 
+				// Return to cruising
 				npc->act_no = 1;
 				npc->act_wait = Random(70, 150);
 				npc->ani_no = 14;
 				npc->ani_wait = 0;
 			}
-
 			break;
 	}
 
-	if (gMC.x < npc->x)
-		npc->direct = 0;
-	else
+	// Face the player
+	if (npc->x <= gMC.x)
 		npc->direct = 2;
+	else
+		npc->direct = 0;
 
-	if (npc->tgt_x < npc->x)
-		npc->xm -= 0x10;
-	if (npc->tgt_x > npc->x)
-		npc->xm += 0x10;
+	// Gentle homing towards target point
+	if (npc->tgt_x < npc->x) npc->xm -= 0x10;
+	if (npc->tgt_x > npc->x) npc->xm += 0x10;
+	if (npc->tgt_y < npc->y) npc->ym -= 0x10;
+	if (npc->tgt_y > npc->y) npc->ym += 0x10;
 
-	if (npc->tgt_y < npc->y)
-		npc->ym -= 0x10;
-	if (npc->tgt_y > npc->y)
-		npc->ym += 0x10;
-
-	if (npc->xm > 0x200)
-		npc->xm = 0x200;
-	if (npc->xm < -0x200)
-		npc->xm = -0x200;
-
-	if (npc->ym > 0x200)
-		npc->ym = 0x200;
-	if (npc->ym < -0x200)
-		npc->ym = -0x200;
+	// Speed limit
+	if (npc->xm > 0x200)  npc->xm = 0x200;
+	if (npc->xm < -0x200) npc->xm = -0x200;
+	if (npc->ym > 0x200)  npc->ym = 0x200;
+	if (npc->ym < -0x200) npc->ym = -0x200;
 
 	npc->x += npc->xm;
 	npc->y += npc->ym;
 
+	// Sprite selection
 	if (npc->direct == 0)
 		npc->rect = grcKitL[npc->ani_no];
 	else
 		npc->rect = grcKitR[npc->ani_no];
 
-	if (npc->life <= 985)
+	// [MOD] "Wounded" Transformation Logic
+	// If health is 50 or less, transform into NPC 154 (The tumbling corpse NPC)
+	if (npc->life <= 50)
 	{
 		npc->code_char = 154;
 		npc->act_no = 0;
 	}
 }
-
 // Gaudi projectile
 void ActNpc156(NPCHAR *npc)
 {
@@ -1803,46 +1978,93 @@ void ActNpc156(NPCHAR *npc)
 		npc->cond = 0;
 	}
 }
-
-// Moving block (vertical)
+// Moving block (vertical) - Modded NPC 157
 void ActNpc157(NPCHAR *npc)
 {
 	int i;
+	int speed_limit;
 
 	switch (npc->act_no)
 	{
 		case 0:
+			// Shift block position by 8 pixels
 			npc->x += 8 * 0x200;
 			npc->y += 8 * 0x200;
+			npc->bits |= NPC_SOLID_HARD;
 
+			// If Option 1 (0x100) is set, block is "dormant" until stepped on
+			if (npc->bits & 0x100) // Note: Map editor bits can vary by mod
+			{
+				npc->act_no = 1;
+				npc->ani_no = 3;
+			}
+			else
+			{
+				npc->ani_no = 1;
+				if (npc->direct == 0)
+					npc->act_no = 10;
+				else
+					npc->act_no = 20;
+			}
+
+			npc->xm = 0;
+			npc->ym = 0;
+			break;
+
+		case 1:
+			// Wait for player to step on top of the block
+			if (JudgeHitMyCharNPC4(npc))
+			{
+				npc->act_no = 2;
+				npc->ani_no = 2;
+				npc->count1 = 0;
+				SetQuake(30);
+			}
+			break;
+
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+			// Activation timer: 6 steps of 5 frames each with a "click" sound
+			if (++npc->count1 > 5)
+			{
+				npc->count1 = 0;
+				npc->act_no++;
+				PlaySoundObject(111, SOUND_MODE_PLAY);
+			}
+			break;
+
+		case 8:
+			// Done activating, start movement
+			npc->ani_no = 1;
+			npc->count1 = 0;
 			if (npc->direct == 0)
 				npc->act_no = 10;
 			else
 				npc->act_no = 20;
-
-			npc->xm = 0;
-			npc->ym = 0;
-			npc->bits |= NPC_SOLID_HARD;
-
 			break;
 
-		case 10:
+		case 10: // Waiting at bottom
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			if (gMC.y < npc->y + (25 * 0x200) && gMC.y > npc->y - (25 * 0x10 * 0x200) && gMC.x < npc->x + (25 * 0x200) && gMC.x > npc->x - (25 * 0x200))
+			// Detect player within a large vertical column (400 pixels up)
+			if (gMC.y < npc->y + 0x3200 && gMC.y > npc->y - (400 * 0x200) &&
+				gMC.x < npc->x + 0x3200 && gMC.x > npc->x - 0x3200)
 			{
 				npc->act_no = 11;
 				npc->act_wait = 0;
 			}
-
 			break;
 
-		case 11:
+		case 11: // Moving Up
 			if (++npc->act_wait % 10 == 6)
 				PlaySoundObject(107, SOUND_MODE_PLAY);
 
-			if (npc->flag & 2)
+			if (npc->flag & 2) // Hit ceiling
 			{
 				npc->ym = 0;
 				npc->direct = 2;
@@ -1851,43 +2073,43 @@ void ActNpc157(NPCHAR *npc)
 				PlaySoundObject(26, SOUND_MODE_PLAY);
 
 				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y - (16 * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
-
-				break;
-			}
-
-			if (gMC.flag & 2)
-			{
-				npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 100;
+					SetNpChar(4, npc->x - 0x2000, npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 			}
 			else
 			{
-				npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 0;
+				// Crush Logic: If player's top is hitting a ceiling while block moves up
+				if (gMC.flag & 2)
+				{
+					npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 100;
+				}
+				else
+				{
+					npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 0;
+				}
+				npc->ym -= 0x20;
 			}
-
-			npc->ym -= 0x20;
-
 			break;
 
-		case 20:
+		case 20: // Waiting at top
 			npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
 			npc->damage = 0;
 
-			if (gMC.y > npc->y - (25 * 0x200) && gMC.y < npc->y + (25 * 0x10 * 0x200) && gMC.x < npc->x + (25 * 0x200) && gMC.x > npc->x - (25 * 0x200))
+			// Detect player within a large vertical column (400 pixels down)
+			if (gMC.y > npc->y - 0x3200 && gMC.y < npc->y + (400 * 0x200) &&
+				gMC.x < npc->x + 0x3200 && gMC.x > npc->x - 0x3200)
 			{
 				npc->act_no = 21;
 				npc->act_wait = 0;
 			}
-
 			break;
 
-		case 21:
+		case 21: // Moving Down
 			if (++npc->act_wait % 10 == 6)
 				PlaySoundObject(107, SOUND_MODE_PLAY);
 
-			if (npc->flag & 8)
+			if (npc->flag & 8) // Hit floor
 			{
 				npc->ym = 0;
 				npc->direct = 0;
@@ -1896,36 +2118,54 @@ void ActNpc157(NPCHAR *npc)
 				PlaySoundObject(26, SOUND_MODE_PLAY);
 
 				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (16 * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
-
-				break;
-			}
-
-			if (gMC.flag & 8)
-			{
-				npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 100;
+					SetNpChar(4, npc->x + 0x2000, npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
 			}
 			else
 			{
-				npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
-				npc->damage = 0;
+				// Crush Logic: If player's bottom is hitting a floor while block moves down
+				if (gMC.flag & 8)
+				{
+					npc->bits |= NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 100;
+				}
+				else
+				{
+					npc->bits &= ~NPC_REAR_AND_TOP_DONT_HURT;
+					npc->damage = 0;
+				}
+				npc->ym += 0x20;
 			}
-
-			npc->ym += 0x20;
-
 			break;
 	}
 
-	if (npc->ym > 0x200)
-		npc->ym = 0x200;
-	if (npc->ym < -0x200)
-		npc->ym = -0x200;
+	// Speed Logic
+	// If Option 0x400 (usually "Appear from Chest" bit) is set, block moves at 4px/f.
+	// Otherwise, standard 1px/f.
+	if (npc->bits & 0x400)
+		speed_limit = 0x800;
+	else
+		speed_limit = 0x200;
+
+	if (npc->ym > speed_limit) npc->ym = speed_limit;
+	if (npc->ym < -speed_limit) npc->ym = -speed_limit;
 
 	npc->y += npc->ym;
 
-	RECT rect = {16, 0, 48, 32};
-	npc->rect = rect;
+	// Visuals
+	// The mod uses a specific layout on the sprite sheet starting at Y=208
+	npc->rect.left = (32 * (npc->ani_no - 1)) + 48;
+	npc->rect.right = npc->rect.left + 32;
+	
+	if (npc->direct == 0)
+	{
+		npc->rect.top = 208;
+		npc->rect.bottom = 240;
+	}
+	else
+	{
+		npc->rect.top = 224;
+		npc->rect.bottom = 240;
+	}
 }
 
 // Fish Missile

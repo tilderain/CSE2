@@ -398,9 +398,181 @@ void ActNpc181(NPCHAR *npc)
 		npc->rect = rcRight[npc->ani_no];
 }
 
-void ActNpc182(NPCHAR *npc) {}
-void ActNpc183(NPCHAR *npc) {}
-void ActNpc184(NPCHAR *npc) {}
+// Curly AI Polar Star
+void ActNpc182(NPCHAR *npc)
+{
+	RECT rcLeft[2] = {
+		{184, 152, 200, 168},
+		{200, 152, 216, 168},
+	};
+
+	RECT rcRight[2] = {
+		{184, 168, 200, 184},
+		{200, 168, 216, 184},
+	};
+
+	if (npc->pNpc == NULL)
+		return;
+
+	if (npc->pNpc->ani_no < 5)
+	{
+		if (npc->pNpc->direct == 0)
+		{
+			npc->direct = 0;
+			npc->x = npc->pNpc->x - (8 * 0x200);
+		}
+		else
+		{
+			npc->direct = 2;
+			npc->x = npc->pNpc->x + (8 * 0x200);
+		}
+
+		npc->y = npc->pNpc->y;
+		npc->ani_no = 0;
+	}
+	else
+	{
+		if (npc->pNpc->direct == 0)
+		{
+			npc->direct = 0;
+			npc->x = npc->pNpc->x;
+		}
+		else
+		{
+			npc->direct = 2;
+			npc->x = npc->pNpc->x;
+		}
+
+		npc->y = npc->pNpc->y - (10 * 0x200);
+		npc->ani_no = 1;
+	}
+
+	if (npc->pNpc->ani_no == 1 || npc->pNpc->ani_no == 3 || npc->pNpc->ani_no == 6 || npc->pNpc->ani_no == 8)
+		npc->y -= 1 * 0x200;
+
+	switch (npc->act_no)
+	{
+		case 0:
+			if (npc->pNpc->count2 == 10)
+			{
+				npc->pNpc->count2 = 0;
+				npc->act_no = 10;
+				npc->act_wait = 0;
+			}
+
+			break;
+
+		case 10:
+			if (++npc->act_wait % 12 == 1)
+			{
+				if (npc->ani_no == 0)
+				{
+					if (npc->direct == 0)
+					{
+						SetBullet(6, npc->x - (4 * 0x200), npc->y + (3 * 0x200), 0);
+						SetCaret(npc->x - (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
+					}
+					else
+					{
+						SetBullet(6, npc->x + (4 * 0x200), npc->y + (3 * 0x200), 2);
+						SetCaret(npc->x + (4 * 0x200), npc->y + (3 * 0x200), 3, 0);
+					}
+				}
+				else
+				{
+					if (npc->direct == 0)
+					{
+						SetBullet(6, npc->x - (2 * 0x200), npc->y - (4 * 0x200), 1);
+						SetCaret(npc->x - (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
+					}
+					else
+					{
+						SetBullet(6, npc->x + (2 * 0x200), npc->y - (4 * 0x200), 1);
+						SetCaret(npc->x + (2 * 0x200), npc->y - (4 * 0x200), 3, 0);
+					}
+				}
+			}
+
+			if (npc->act_wait == 60)
+				npc->act_no = 0;
+
+			break;
+	}
+
+	if (npc->direct == 0)
+		npc->rect = rcLeft[npc->ani_no];
+	else
+		npc->rect = rcRight[npc->ani_no];
+}
+
+// Curly Air Tank Bubble
+void ActNpc183(NPCHAR *npc)
+{
+	RECT rect[2] = {
+		{56, 96, 80, 120},
+		{80, 96, 104, 120},
+	};
+
+	if (npc->pNpc == NULL)
+		return;
+
+	switch (npc->act_no)
+	{
+		case 0:
+			npc->x = npc->pNpc->x;
+			npc->y = npc->pNpc->y;
+			npc->act_no = 1;
+			break;
+	}
+
+	npc->x += (npc->pNpc->x - npc->x) / 2;
+	npc->y += (npc->pNpc->y - npc->y) / 2;
+
+	if (++npc->ani_wait > 1)
+	{
+		npc->ani_wait = 0;
+		++npc->ani_no;
+	}
+
+	if (npc->ani_no > 1)
+		npc->ani_no = 0;
+
+	if (npc->pNpc->flag & 0x100)
+		npc->rect = rect[npc->ani_no];
+	else
+		npc->rect.right = 0;
+}
+
+// Big Shutter - NPC 184 (Simplified Mod Version)
+void ActNpc184(NPCHAR *npc)
+{
+	static const RECT rect[4] = {
+		{0, 64, 32, 96},
+		{32, 64, 64, 96},
+		{64, 64, 96, 96},
+		{32, 64, 64, 96},
+	};
+
+	// Act 0: Initialization
+	if (npc->act_no != 1)
+	{
+		npc->x += 8 * 0x200;
+		npc->y += 8 * 0x200;
+		npc->act_no = 1;
+	}
+
+	// Simple looping animation
+	if (++npc->ani_wait > 10)
+	{
+		npc->ani_wait = 0;
+		++npc->ani_no;
+	}
+
+	if (npc->ani_no > 3)
+		npc->ani_no = 0;
+
+	npc->rect = rect[npc->ani_no];
+}
 
 #include "Map.h"
 
@@ -532,10 +704,10 @@ void ActNpc185(NPCHAR *npc)
     // Synchronize the rendering view height to match the dynamic collision height
     npc->view.bottom = npc->hit.bottom;
 }
-// Lift block
+// Lift block - NPC 186
 void ActNpc186(NPCHAR *npc)
 {
-	RECT rc[4] = {
+	static const RECT rc[4] = {
 		{48, 48, 64, 64},
 		{64, 48, 80, 64},
 		{80, 48, 96, 64},
@@ -554,32 +726,26 @@ void ActNpc186(NPCHAR *npc)
 			npc->act_no = 11;
 			npc->ani_no = 1;
 			npc->act_wait = 0;
-			npc->bits |= NPC_IGNORE_SOLIDITY;
+			// [MOD] Instead of NPC_IGNORE_SOLIDITY (8), it sets NPC_SOLID_SOFT (1)
+			npc->bits |= NPC_SOLID_SOFT; 
 			// Fallthrough
 		case 11:
+			// [MOD] Speed increased from 128 (0x80) to 384 (0x180)
 			switch (npc->direct)
 			{
-				case 0:
-					npc->x -= 0x80;
-					break;
-
-				case 1:
-					npc->y -= 0x80;
-					break;
-
-				case 2:
-					npc->x += 0x80;
-					break;
-
-				case 3:
-					npc->y += 0x80;
-					break;
+				case 0: npc->xm = -384; break; // Left
+				case 1: npc->ym = -384; break; // Up
+				case 2: npc->xm = 384;  break; // Right
+				case 3: npc->ym = 384;  break; // Down
 			}
 
+			npc->x += npc->xm;
+			npc->y += npc->ym;
 			++npc->act_wait;
 			break;
 	}
 
+	// Animation remains vanilla (6 FPS rotation)
 	if (++npc->ani_wait > 10)
 	{
 		npc->ani_wait = 0;
@@ -592,8 +758,99 @@ void ActNpc186(NPCHAR *npc)
 	npc->rect = rc[npc->ani_no];
 }
 
-void ActNpc187(NPCHAR *npc) {}
 
+// Fuzz Core - NPC 187 (Modded Version)
+void ActNpc187(NPCHAR *npc)
+{
+	int i;
+
+	static const RECT rcLeft[2] = {
+		{224, 104, 256, 136},
+		{256, 104, 288, 136},
+	};
+
+	static const RECT rcRight[2] = {
+		{224, 136, 256, 168},
+		{256, 136, 288, 168},
+	};
+
+	switch (npc->act_no)
+	{
+		case 0:
+			npc->act_no = 1;
+			npc->tgt_x = npc->x;
+			npc->tgt_y = npc->y;
+			npc->count1 = 120;
+			npc->act_wait = Random(0, 50);
+
+			// Spawn 5 Fuzz children (NPC 188)
+			for (i = 0; i < 5; ++i)
+				SetNpChar(188, 0, 0, 0, 0, 51 * i, npc, 0x100);
+			
+			// Fallthrough
+		case 1:
+			if (++npc->act_wait > 49)
+			{
+				npc->act_wait = 0;
+				npc->act_no = 2;
+				npc->ym = 0x300;
+			}
+			break;
+
+		case 2:
+			npc->count1 += 4;
+
+			// Face the player
+			if (gMC.x < npc->x)
+				npc->direct = 0;
+			else
+				npc->direct = 2;
+
+			// Vertical homing logic toward the origin point (tgt_y)
+			if (npc->tgt_y < npc->y) npc->ym -= 0x10;
+			if (npc->tgt_y > npc->y) npc->ym += 0x10;
+
+			// Clamp vertical speed
+			if (npc->ym > 0x355)  npc->ym = 0x355;
+			if (npc->ym < -0x355) npc->ym = -0x355;
+
+			break;
+	}
+
+	npc->x += npc->xm;
+	npc->y += npc->ym;
+
+	// [MOD] New Death/Transformation Logic
+	// If health is below 51, check for custom flag 0xAF0 (2800)
+	if (npc->life < 51)
+	{
+		npc->life = 0;
+		if (GetNPCFlag(0xAF0))
+		{
+			// Spawn NPC 166 (The modded bouncing debris object)
+			SetNpChar(166, npc->x, npc->y, 0, 0, 0, NULL, 0x100);
+			
+			// FUN_00493e45 is a custom mod function (replaces LoseNpChar/VanishNpChar)
+			FUN_00493e45(npc, 1); 
+			
+			npc->cond = 0; // Destroy the core
+			return;        // Exit to prevent rect assignment
+		}
+	}
+
+	// Standard animation
+	if (++npc->ani_wait > 2)
+	{
+		npc->ani_wait = 0;
+		if (++npc->ani_no > 1)
+			npc->ani_no = 0;
+	}
+
+	if (npc->direct == 0)
+		npc->rect = rcLeft[npc->ani_no];
+	else
+		npc->rect = rcRight[npc->ani_no];
+}
 // Fuzz
 void ActNpc188(NPCHAR *npc)
 {

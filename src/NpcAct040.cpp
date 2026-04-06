@@ -983,9 +983,21 @@ void ActNpc049(NPCHAR *npc)
 			}
 
 			if (npc->act_wait > 50)
+			{
+				npc->count1 = 0; // [MOD] Added reset
 				npc->act_no = 10;
-
+				npc->ani_no = 1;
+			}
 			break;
+	}
+
+	// [MOD] New attachment logic
+	if (npc->act_no >= 10)
+	{
+		npc->x = npc->pNpc->x;
+		npc->y = npc->pNpc->y + 0x2000;
+		npc->direct = npc->pNpc->direct;
+		--npc->pNpc->count1;
 	}
 
 	npc->ym += 0x40;
@@ -995,16 +1007,17 @@ void ActNpc049(NPCHAR *npc)
 	npc->x += npc->xm;
 	npc->y += npc->ym;
 
+	// [MOD] Updated rect table
 	RECT rcLeft[3] = {
-		{256, 192, 272, 216},
-		{272, 192, 288, 216},
-		{288, 192, 304, 216},
+		{0, 104, 32, 128},
+		{32, 104, 64, 128},
+		{64, 104, 96, 128},
 	};
 
 	RECT rcRight[3] = {
-		{256, 216, 272, 240},
-		{272, 216, 288, 240},
-		{288, 216, 304, 240},
+		{0, 80, 32, 104},
+		{32, 80, 64, 104},
+		{64, 80, 96, 104},
 	};
 
 	if (npc->direct == 0)

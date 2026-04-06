@@ -1709,7 +1709,6 @@ void ActNpc075(NPCHAR *npc)
 
 	npc->rect = rcLeft[npc->ani_no];
 }
-
 // Flowers
 void ActNpc076(NPCHAR *npc)
 {
@@ -1753,26 +1752,25 @@ void ActNpc076(NPCHAR *npc)
 		npc->y += npc->ym;
 	}
 
-	if (npc->exp < 11)
-	{
-		if (npc->exp < 3)
-		{
-			npc->rect.top = 80;
-			npc->rect.bottom = 96;
-		}
-		else
-		{
-			npc->rect.top = 96;
-			npc->rect.bottom = 112;
-		}
-	}
-	else
+	// [MOD] Exp thresholds slightly adjusted
+	if (npc->exp > 12)
 	{
 		npc->rect.top = 112;
 		npc->rect.bottom = 128;
 	}
+	else if (npc->exp > 2)
+	{
+		npc->rect.top = 96;
+		npc->rect.bottom = 112;
+	}
+	else
+	{
+		npc->rect.top = 80;
+		npc->rect.bottom = 96;
+	}
 
-	npc->rect.left = npc->ani_no * 16;
+	// [MOD] The sprite is now drawn 64 pixels further to the right on the sheet
+	npc->rect.left = (npc->ani_no * 16) + 64;
 	npc->rect.right = npc->rect.left + 16;
 
 	if (npc->direct == 0)
@@ -1783,14 +1781,23 @@ void ActNpc076(NPCHAR *npc)
 
 	if (npc->count1 > 500)
 	{
-		if (npc->count1 / 2 % 2)
+		if ((npc->count1 / 2) % 2)
 		{
-			npc->rect.left = 0;
+			// [MOD] Instead of zeroing left and right, it just zeroes right 
+			// (achieves the same invisible result but is slightly faster)
 			npc->rect.right = 0;
 		}
 	}
-}
 
+	// [MOD] Added specific disappear/poof animation frame at the end of its lifespan
+	if (npc->count1 > 547)
+	{
+		npc->rect.left = 16;
+		npc->rect.top = 0;
+		npc->rect.right = 32;
+		npc->rect.bottom = 16;
+	}
+}
 // Dummy NPC
 void ActNpc077(NPCHAR *npc)
 {
@@ -1810,12 +1817,75 @@ void ActNpc078(NPCHAR *npc)
 		npc->rect = rc[1];
 }
 
-// Log replacement (Mahin slot)
+// Mahin
 void ActNpc079(NPCHAR *npc)
 {
-	RECT rc[1] = {
-		{192, 48, 224, 64},
+	// The decompiled version initializes these as a flat array (local_64).
+	// We'll use the standard CSE2 RECT arrays for readability as they 
+	// result in the same assembly offsets.
+	static const RECT rcLeft[3] = {
+		{0, 0, 16, 16},
+		{16, 0, 32, 16},
+		{32, 0, 48, 16},
 	};
 
-	npc->rect = rc[0];
+	static const RECT rcRight[3] = {
+		{0, 16, 16, 32},
+		{16, 16, 32, 32},
+		{32, 16, 48, 32},
+	};
+
+	// State Machine (The decomp used an if/else if chain, but switch is the standard)
+	if (npc->act_no == 0)
+	{
+		npc->act_no = 1;
+		npc->ani_no = 2;
+		npc->ani_wait = 0;
+	}
+	else if (npc->act_no == 2)
+	{
+		npc->ani_no = 0;
+
+		// 0x78 = 120
+		if (Random(0, 120) == 10)
+		{
+			npc->act_no = 3;
+			npc->act_wait = 0;
+			npc->ani_no = 1;
+		}
+
+		// Range check: is the player within 32 pixels horizontally and 
+		// between 32 pixels above / 16 pixels below?
+		if (npc->x - 0x4000 < gMC.x && npc->x + 0x4000 > gMC.x &&
+			npc->y - 0x4000 < gMC.y && npc->y + 0x2000 > gMC.y)
+		{
+			if (gMC.x < npc->x)
+				npc->direct = 0;
+			else
+				npc->direct = 2;
+		}
+	}
+	else if (npc->act_no == 3)
+	{
+		npc->act_wait++;
+
+		if (npc->act_wait > 8)
+		{
+			npc->act_no = 2;
+			npc->ani_no = 0;
+		}
+	}
+
+	// Physics logic (Gravity)
+	npc->ym += 0x40;
+	if (npc->ym > 0x5FF)
+		npc->ym = 0x5FF;
+
+	npc->y += npc->ym;
+
+	// Frame set based on direction
+	if (npc->direct == 0)
+		npc->rect = rcLeft[npc->ani_no];
+	else
+		npc->rect = rcRight[npc->ani_no];
 }

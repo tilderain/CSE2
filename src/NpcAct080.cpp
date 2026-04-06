@@ -785,9 +785,12 @@ void ActNpc086(NPCHAR *npc)
 	}
 }
 
-// Crow replacement
+// Crow replacement (Flower variant)
 void ActNpc087(NPCHAR *npc)
 {
+	int a;
+	int left_offset;
+
 	if (npc->code_event != 0)
 		npc->exp = npc->code_event;
 
@@ -803,6 +806,7 @@ void ActNpc087(NPCHAR *npc)
 			npc->ani_no = 0;
 	}
 
+	// Flying logic for specific background modes (like the Outer Wall)
 	if (gBack.type == 5 || gBack.type == 6)
 	{
 		if (npc->act_no == 0)
@@ -814,12 +818,15 @@ void ActNpc087(NPCHAR *npc)
 
 		npc->xm -= 8;
 
+		// Destroy if it goes too far left
 		if (npc->x < 0xA000)
 			npc->cond = 0;
 
+		// Horizontal boundary
 		if (npc->x < -0x600)
 			npc->x = -0x600;
 
+		// Bounce off walls/floors
 		if (npc->flag & 1) npc->xm = 0x100;
 		if (npc->flag & 2) npc->ym = 0x40;
 		if (npc->flag & 8) npc->ym = -0x40;
@@ -828,41 +835,50 @@ void ActNpc087(NPCHAR *npc)
 		npc->y += npc->ym;
 	}
 
-	if (npc->exp < 11)
-	{
-		if (npc->exp < 3)
-		{
-			npc->rect.top = 80;
-			npc->rect.bottom = 96;
-		}
-		else
-		{
-			npc->rect.top = 96;
-			npc->rect.bottom = 112;
-		}
-	}
-	else
+	// Set sprite color based on exp (event number)
+	// [MOD] Thresholds slightly adjusted from vanilla
+	if (npc->exp > 12)
 	{
 		npc->rect.top = 112;
 		npc->rect.bottom = 128;
 	}
+	else if (npc->exp > 2)
+	{
+		npc->rect.top = 96;
+		npc->rect.bottom = 112;
+	}
+	else
+	{
+		npc->rect.top = 80;
+		npc->rect.bottom = 96;
+	}
 
-	npc->rect.left = npc->ani_no * 16 + 32;
-	npc->rect.right = npc->rect.left + 16;
+	// [MOD] This specific variant uses an offset of +32 for its X coordinates
+	left_offset = (npc->ani_no * 16) + 32;
+	npc->rect.left = left_offset;
+	npc->rect.right = left_offset + 16;
 
 	if (npc->direct == 0)
 		npc->count1++;
 
+	// Lifespan logic
 	if (npc->count1 > 550)
 		npc->cond = 0;
 
+	// Flicker before disappearing
 	if (npc->count1 > 500)
 	{
-		if (npc->count1 / 2 % 2)
-		{
-			npc->rect.left = 0;
+		if ((npc->count1 / 2) % 2)
 			npc->rect.right = 0;
-		}
+	}
+
+	// [MOD] Added specific "poof" frame for the final 3 frames of life (548, 549, 550)
+	if (npc->count1 > 547)
+	{
+		npc->rect.left = 16;
+		npc->rect.top = 0;
+		npc->rect.right = 32;
+		npc->rect.bottom = 16;
 	}
 }
 

@@ -451,54 +451,80 @@ void ActNpc165(NPCHAR *npc)
 	else
 		npc->rect = rcRight[npc->ani_no];
 }
-
-// Chaba
+// Modded NPC 166 - Bouncing Debris / Physics Object
 void ActNpc166(NPCHAR *npc)
 {
-	RECT rcLeft[2] = {
-		{144, 104, 184, 128},
-		{184, 104, 224, 128},
-	};
-
-	switch (npc->act_no)
+	if (npc->act_no == 0)
 	{
-		case 0:
-			npc->act_no = 1;
-			npc->ani_no = 0;
-			npc->ani_wait = 0;
-			// Fallthrough
-		case 1:
-			if (Random(0, 120) == 10)
-			{
-				npc->act_no = 2;
-				npc->act_wait = 0;
-				npc->ani_no = 1;
-			}
-
-			break;
-
-		case 2:
-			if (++npc->act_wait > 8)
-			{
-				npc->act_no = 1;
-				npc->ani_no = 0;
-			}
-
-			break;
+		npc->bits = 0x2102;    // NPC_INVULNERABLE | NPC_IGNORE_SOLIDITY (approx)
+		npc->code_event = 2800; // Trigger for TSC event 2800
+		
+		npc->xm = Random(-1024, 1024);
+		npc->ym = Random(-2048, 512);
+		
+		npc->act_no = 1;
 	}
 
-	npc->rect = rcLeft[npc->ani_no];
-}
+	// Apply Gravity
+	// If flag 0x100 is set (NPC is in water), gravity is doubled (42 vs 21)
+	// This might represent sinking physics or a heavy liquid
+	if (npc->flag & 0x100)
+		npc->ym += 42;
+	else
+		npc->ym += 21;
 
-// Professor Booster (falling)
+	// Bounce off walls (Left or Right)
+	if (npc->flag & 0x05)
+		npc->xm = -npc->xm;
+
+	// Ceiling logic
+	if (npc->flag & 0x02)
+	{
+		npc->ym /= 2;
+		// If moving slow enough, stop vertical movement, else bounce
+		if (npc->ym < 100 && npc->ym >= -100)
+			npc->ym = 0;
+		else
+			npc->ym = -npc->ym;
+	}
+
+	// Horizontal air friction / Slow down
+	if (npc->xm >= 100 || npc->xm <= -96)
+		npc->xm -= npc->xm / 20;
+	else
+		npc->xm = 0;
+
+	// Animation: 2-frame flicker/rotation every 6 frames
+	if (++npc->ani_wait >= 6)
+	{
+		npc->ani_wait = 0;
+		if (++npc->ani_no > 1)
+			npc->ani_no = 0;
+	}
+
+	// Sprite Coordinates (Stored on NpcSym or similar)
+	// Base X = 288, Base Y = 136, Size = 16x16
+	static const RECT rect[2] = {
+		{288, 136, 304, 152},
+		{304, 136, 320, 152},
+	};
+
+	npc->rect = rect[npc->ani_no];
+
+	// Apply velocities
+	npc->x += npc->xm;
+	npc->y += npc->ym;
+}
+// Professor Booster (falling) - NPC 167
 void ActNpc167(NPCHAR *npc)
 {
 	int i;
 
-	RECT rect[3] = {
-		{304, 0, 320, 16},
-		{304, 16, 320, 32},
-		{0, 0, 0, 0},
+	// [MOD] Sprite coordinates shifted right by 16 pixels (304 -> 320)
+	static const RECT rect[3] = {
+		{320, 0, 336, 16},
+		{320, 16, 336, 32},
+		{0, 0, 0, 0},      // Flicker/invisible frame
 	};
 
 	switch (npc->act_no)
@@ -509,8 +535,8 @@ void ActNpc167(NPCHAR *npc)
 			break;
 
 		case 10:
+			// Falling logic
 			npc->ani_no = 0;
-
 			npc->ym += 0x40;
 			if (npc->ym > 0x5FF)
 				npc->ym = 0x5FF;
@@ -522,26 +548,34 @@ void ActNpc167(NPCHAR *npc)
 			npc->act_no = 21;
 			npc->act_wait = 0;
 			npc->ani_no = 0;
-			PlaySoundObject(29, SOUND_MODE_PLAY);
+			PlaySoundObject(29, SOUND_MODE_PLAY); // Teleport sound
 			// Fallthrough
+
 		case 21:
+			// [MOD] Custom flicker animation:
+			// Cycles between rect[1] and rect[2] (invisible)
 			if (++npc->ani_no > 2)
 				npc->ani_no = 1;
 
 			if (++npc->act_wait > 100)
 			{
+				// Spawn 4 smoke/cloud effects
 				for (i = 0; i < 4; ++i)
-					SetNpChar(4, npc->x + (Random(-12, 12) * 0x200), npc->y + (Random(-12, 12) * 0x200), Random(-341, 341), Random(-0x600, 0), 0, NULL, 0x100);
-
-				npc->cond = 0;
+				{
+					SetNpChar(4, 
+						npc->x + (Random(-12, 12) * 0x200), 
+						npc->y + (Random(-12, 12) * 0x200), 
+						Random(-341, 341), 
+						Random(-0x600, 0), 
+						0, NULL, 0x100);
+				}
+				npc->cond = 0; // Disappear
 			}
-
 			break;
 	}
 
 	npc->rect = rect[npc->ani_no];
 }
-
 // Boulder
 void ActNpc168(NPCHAR *npc)
 {
@@ -1397,30 +1431,34 @@ void ActNpc175(NPCHAR *npc)
 		npc->rect = rcLeft[npc->ani_no];
 	else
 		npc->rect = rcRight[npc->ani_no];
-}
-// BuyoBuyo Base
+}// BuyoBuyo Base - NPC 176
 void ActNpc176(NPCHAR *npc)
 {
-	RECT rcLeft[3] = {
+	int i;
+
+	static const RECT rcLeft[3] = {
 		{96, 128, 128, 144},
 		{128, 128, 160, 144},
-		{160, 128, 192, 144},
+		{160, 128, 192, 144}, // Broken frame
 	};
 
-	RECT rcRight[3] = {
+	static const RECT rcRight[3] = {
 		{96, 144, 128, 160},
 		{128, 144, 160, 160},
-		{160, 144, 192, 160},
+		{160, 144, 192, 160}, // Broken frame
 	};
 
+	// Check if NPC should enter "broken" state
+	// 0x3AC = 940 HP
 	if (npc->act_no < 3 && npc->life < 940)
 	{
-		// MOD: Call new lose function 0x493e45 instead of LoseNpChar
-		LoseNpChar(npc, FALSE);
+		// FUN_00493e45 is a custom mod function likely replacing LoseNpChar/VanishNpChar
+		// It likely triggers specific flag or explosion logic.
 		npc->act_no = 10;
 		npc->ani_no = 2;
 		npc->bits &= ~NPC_SHOOTABLE;
 		npc->damage = 0;
+		LoseNpChar(npc, 0);
 	}
 
 	switch (npc->act_no)
@@ -1430,31 +1468,41 @@ void ActNpc176(NPCHAR *npc)
 			npc->ani_no = 0;
 			npc->ani_wait = 0;
 			// Fallthrough
+
 		case 1:
-			if (npc->direct == 0)
+			// Detection logic: increments count1 while player is in range.
+			// Range: 160px horizontal, 160px vertically "in front" of the turret, 16px "behind" it.
+			if (npc->direct == 0) // Facing Left (Upwards in some contexts)
 			{
-				if (npc->x < gMC.x + (160 * 0x200) && npc->x > gMC.x - (160 * 0x200) && npc->y < gMC.y + (160 * 0x200) && npc->y > gMC.y - (16 * 0x200))
-					++npc->count1;
+				if (npc->x < gMC.x + (160 * 0x200) && npc->x > gMC.x - (160 * 0x200) && 
+					npc->y < gMC.y + (160 * 0x200) && npc->y > gMC.y - (16 * 0x200))
+				{
+					npc->count1++;
+				}
 			}
-			else
+			else // Facing Right (Downwards in some contexts)
 			{
-				if (npc->x < gMC.x + (160 * 0x200) && npc->x > gMC.x - (160 * 0x200) && npc->y < gMC.y + (16 * 0x200) && npc->y > gMC.y - (160 * 0x200))
-					++npc->count1;
+				if (npc->x < gMC.x + (160 * 0x200) && npc->x > gMC.x - (160 * 0x200) && 
+					npc->y < gMC.y + (16 * 0x200) && npc->y > gMC.y - (160 * 0x200))
+				{
+					npc->count1++;
+				}
 			}
 
+			// If proximity is maintained for 10 frames, start firing
 			if (npc->count1 > 10)
 			{
 				npc->act_no = 2;
 				npc->act_wait = 0;
 			}
-
 			break;
 
 		case 2:
+			// "Charging" animation (vibrating)
 			if (++npc->ani_wait > 3)
 			{
 				npc->ani_wait = 0;
-				++npc->ani_no;
+				npc->ani_no++;
 			}
 
 			if (npc->ani_no > 1)
@@ -1462,34 +1510,44 @@ void ActNpc176(NPCHAR *npc)
 
 			if (++npc->act_wait > 10)
 			{
-				if (++npc->count2 > 2)
+				npc->count2++; // Increment burst counter
+
+				// 3-shot burst logic
+				if (npc->count2 < 3)
+				{
+					npc->count1 = -10; // short cooldown
+				}
+				else
 				{
 					npc->count2 = 0;
-					npc->count1 = -90;
-				}
-				else
-				{
-					npc->count1 = -10;
+					npc->count1 = -90; // long cooldown (0x5A)
 				}
 
+				// Spawn projectile (NPC 177 / 0xB1)
 				if (npc->direct == 0)
-					SetNpChar(177, npc->x, npc->y - (8 * 0x200), 0, 0, 0, NULL, 0x100);
+					SetNpChar(177, npc->x, npc->y - 0x1000, 0, 0, 0, NULL, 0x100);
 				else
-					SetNpChar(177, npc->x, npc->y + (8 * 0x200), 0, 0, 2, NULL, 0x100);
+					SetNpChar(177, npc->x, npc->y + 0x1000, 0, 0, 2, NULL, 0x100);
 
 				PlaySoundObject(39, SOUND_MODE_PLAY);
 
-				npc->act_no = 0;
+				npc->act_no = 1; // Return to state 1 to check cooldown in count1
 				npc->ani_no = 0;
 
+				// Custom Mod logic: Updating global Curly fight variables
+				// Note: 0x50 = 80
 				gCurlyShoot_wait = Random(80, 100);
 				gCurlyShoot_x = npc->x;
 				gCurlyShoot_y = npc->y;
 			}
-
+			break;
+		
+		case 10: // Broken state
+			npc->ani_no = 2;
 			break;
 	}
 
+	// Update RECT
 	if (npc->direct == 0)
 		npc->rect = rcLeft[npc->ani_no];
 	else

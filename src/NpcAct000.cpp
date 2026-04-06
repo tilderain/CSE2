@@ -1594,16 +1594,24 @@ void ActNpc016(NPCHAR *npc)
 	npc->rect.left = (npc->ani_no * 16) + 96;
 	npc->rect.right = npc->rect.left + 16;
 }
-
 // Health refill
 void ActNpc017(NPCHAR *npc)
 {
-	RECT rect[2] = {
-		{288, 0, 304, 16},
-		{304, 0, 320, 16},
-	};
-
 	int a;
+	int event_offset;
+	RECT rect_base = {0, 64, 16, 80};
+	RECT rect_blink;
+
+	// In this mod, the sprite's X offset changes based on the NPC's event number
+	if (npc->code_event > 10 && npc->code_event < 20)
+		event_offset = npc->code_event - 15;
+	else
+		event_offset = 0;
+
+	rect_blink.left = 16 * event_offset;
+	rect_blink.top = 64;
+	rect_blink.right = (16 * event_offset) + 16;
+	rect_blink.bottom = 80;
 
 	switch (npc->act_no)
 	{
@@ -1634,7 +1642,7 @@ void ActNpc017(NPCHAR *npc)
 			break;
 
 		case 2:
-			npc->rect = rect[0];
+			npc->rect = rect_blink;
 
 			if (--npc->act_wait == 0)
 				npc->act_no = 1;
@@ -1643,9 +1651,9 @@ void ActNpc017(NPCHAR *npc)
 
 		case 3:
 			if (++npc->ani_wait % 2)
-				npc->rect = rect[0];
+				npc->rect = rect_blink;
 			else
-				npc->rect = rect[1];
+				npc->rect = rect_base;
 
 			if (--npc->act_wait == 0)
 				npc->act_no = 1;
@@ -1653,7 +1661,7 @@ void ActNpc017(NPCHAR *npc)
 			break;
 
 		case 4:
-			npc->rect = rect[1];
+			npc->rect = rect_base;
 
 			if (--npc->act_wait == 0)
 				npc->act_no = 1;
@@ -1668,7 +1676,6 @@ void ActNpc017(NPCHAR *npc)
 
 	npc->y += npc->ym;
 }
-
 // Door
 void ActNpc018(NPCHAR *npc)
 {
