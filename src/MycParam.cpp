@@ -99,7 +99,7 @@ void AddExpMyChar(int x)
 			{
 				++gArmsData[gSelectedArms].level;
 				gArmsData[gSelectedArms].exp = 0;
-3
+
 				// Don't play level-up sound/caret for the Spur (ID 13)
 				if (gArmsData[gSelectedArms].code != 13)
 				{
