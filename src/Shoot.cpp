@@ -484,74 +484,122 @@ void ShootBullet_Missile(int level, bool bSuper)
 	}
 }
 
+// Custom variables used by the mod's new weapon logic
+extern unsigned char gGrappleState; // Maps to 0x493804
+extern unsigned char gCustomWeaponDir;   // Maps to 0x493805
+
+// Replaces ShootBullet_Bubblin1
 void ShootBullet_Bubblin1(void)
 {
-	static int wait;
+	int b_x, b_y;
+	int b_dir;
+	unsigned char dir_8way;
 
-	if (CountArmsBullet(7) > 3)
-		return;
-
-	if (gKeyTrg & gKeyShot)
+	// FUN_004946a0 is a custom wrapper for CountArmsBullet
+	// If no bullets of ID 19 (Bubbler 1) are active, reset the weapon state.
+	if (CountBulletNum(19) == 0)
 	{
-		if (!UseArmsEnergy(1))
+		gGrappleState = 0;
+	}
+
+	// Only allow shooting if the state is 0 and the Shoot key was just pressed
+	if (gGrappleState != 3 && gGrappleState != 2 && gGrappleState != 1 && (gKeyTrg & gKeyShot))
+	{
+		b_dir = gMC.direct;
+
+		// Determine spawn coordinates based on aiming direction
+		if (gMC.up == 0 && gMC.down == 0)
 		{
-			PlaySoundObject(37, SOUND_MODE_PLAY);
-
-			if (empty == 0)
-			{
-				SetCaret(gMC.x, gMC.y, 16, 0);
-				empty = 50;
-			}
-
-			return;
-		}
-
-		if (gMC.up)
-		{
+			// Shooting horizontally
+			b_y = gMC.y + 0x400; // y + 2px
+			
 			if (gMC.direct == 0)
-			{
-				SetBullet(19, gMC.x - (1 * 0x200), gMC.y - (2 * 0x200), 1);
-				SetCaret(gMC.x - (1 * 0x200), gMC.y - (2 * 0x200), 3, 0);
-			}
+				b_x = -0x1000;
 			else
-			{
-				SetBullet(19, gMC.x + (1 * 0x200), gMC.y - (2 * 0x200), 1);
-				SetCaret(gMC.x + (1 * 0x200), gMC.y - (2 * 0x200), 3, 0);
-			}
-		}
-		else if (gMC.down)
-		{
-			if (gMC.direct == 0)
-			{
-				SetBullet(19, gMC.x - (1 * 0x200), gMC.y + (2 * 0x200), 3);
-				SetCaret(gMC.x - (1 * 0x200), gMC.y + (2 * 0x200), 3, 0);
-			}
-			else
-			{
-				SetBullet(19, gMC.x + (1 * 0x200), gMC.y + (2 * 0x200), 3);
-				SetCaret(gMC.x + (1 * 0x200), gMC.y + (2 * 0x200), 3, 0);
-			}
+				b_x = 0x1000;
+			
+			b_x = (b_x * 2) + gMC.x; // Spawn 16 pixels (0x2000) in front of Quote
 		}
 		else
 		{
+			// Shooting vertically
 			if (gMC.direct == 0)
+				b_x = gMC.x - 0x800; // x - 4px
+			else
+				b_x = gMC.x + 0x800; // x + 4px
+
+			if (gMC.up == 0)
 			{
-				SetBullet(19, gMC.x - (6 * 0x200), gMC.y + (3 * 0x200), 0);
-				SetCaret(gMC.x - (12 * 0x200), gMC.y + (3 * 0x200), 3, 0);
+				b_dir = 3; // Down
+				b_y = gMC.y + 0x1800; // y + 12px
 			}
 			else
 			{
-				SetBullet(19, gMC.x + (6 * 0x200), gMC.y + (3 * 0x200), 2);
-				SetCaret(gMC.x + (12 * 0x200), gMC.y + (3 * 0x200), 3, 0);
+				b_dir = 1; // Up
+				b_y = gMC.y - 0x1800; // y - 12px
 			}
 		}
 
-		PlaySoundObject(48, SOUND_MODE_PLAY);
-	}
-	else if (++wait > 20)
-	{
-		wait = 0;
-		ChargeArmsEnergy(1);
+		// Spawn visual effects
+		SetCaret(b_x, b_y, CARET_BUBBLE, b_dir);
+		SetCaret(b_x, b_y, CARET_SHOOT, 0);
+		
+		PlaySoundObject(117, SOUND_MODE_PLAY); // 0x75
+		PlaySoundObject(114, SOUND_MODE_PLAY); // 0x72
+
+		// Minor vertical offset adjustment for horizontal shots
+		if (gMC.up == 0 && gMC.down == 0)
+			b_y -= 0xA00; // y - 5px
+
+		// Fire Bullet 19
+		SetBullet(19, b_x, b_y, b_dir);
+
+		// Lock weapon state to 1
+		gGrappleState = 1;
+
+		// 8-Way Direction Logic Mapping
+		// 0: Left, 1: Up, 2: Right, 3: Down
+		// 4: Up-Left, 5: Up-Right, 6: Down-Right, 7: Down-Left
+		if (!(gKey & gKeyLeft))
+		{
+			if (gKey & gKeyUp)
+			{
+				if (gKey & gKeyRight)
+					dir_8way = 5; // Up-Right
+				else
+					dir_8way = 1; // Up
+			}
+			else if (gKey & gKeyRight)
+			{
+				if (gKey & gKeyDown)
+					dir_8way = 6; // Down-Right
+				else
+					dir_8way = 2; // Right
+			}
+			else if (gKey & gKeyDown)
+			{
+				dir_8way = 3; // Down
+			}
+			else
+			{
+				dir_8way = b_dir; // Default 4-way direction
+			}
+		}
+		else if (gKey & gKeyUp)
+		{
+			dir_8way = 4; // Up-Left
+		}
+		else if (gKey & gKeyDown)
+		{
+			dir_8way = 7; // Down-Left
+		}
+		else
+		{
+			dir_8way = 0; // Left
+		}
+
+		// Store the captured 8-way direction into the new global variable
+		gCustomWeaponDir = dir_8way;
 	}
 }
 
@@ -986,12 +1034,13 @@ void ShootBullet_Spur(int level)
 
 void ShootBullet(void)
 {
-	static int soft_rensha;	// 'rensha' is Japanese for 'rapid-fire', apparently
+	static int soft_rensha;
 
+	// Decrement 'empty' (out of ammo) particle timer
 	if (empty != 0)
 		--empty;
 
-	// Only let the player shoot every 4 frames
+	// Handle rapid-fire (rensha) cooldown
 	if (soft_rensha != 0)
 		--soft_rensha;
 
@@ -1003,78 +1052,65 @@ void ShootBullet(void)
 		soft_rensha = 4;
 	}
 
-	// Run functions
+	// Do not run if Quote is hidden/dead
 	if (gMC.cond & 2)
 		return;
 
-	switch (gArmsData[gSelectedArms].code)
+	int arm_code = gArmsData[gSelectedArms].code;
+	int arm_level = gArmsData[gSelectedArms].level;
+
+	switch (arm_code)
 	{
 		case 1:
-			ShootBullet_Frontia1(gArmsData[gSelectedArms].level);
+			ShootBullet_Frontia1(arm_level);
 			break;
 
 		case 2:
-			ShootBullet_PoleStar(gArmsData[gSelectedArms].level);
+			ShootBullet_PoleStar(arm_level);
 			break;
 
 		case 3:
-			ShootBullet_FireBall(gArmsData[gSelectedArms].level);
+			ShootBullet_FireBall(arm_level);
 			break;
 
 		case 4:
-			ShootBullet_Machinegun1(gArmsData[gSelectedArms].level);
+			// Redirected to modded Machine Gun logic
+			ShootBullet_Machinegun1(arm_level); // Address: 0x41E2E0
 			break;
 
 		case 5:
-			ShootBullet_Missile(gArmsData[gSelectedArms].level, FALSE);
+			// Redirected to modded Missile logic
+			ShootBullet_Missile(arm_level, false); // Address: 0x41E700
 			break;
 
 		case 7:
-			switch (gArmsData[gSelectedArms].level)
-			{
-				case 1:
-					ShootBullet_Bubblin1();
-					break;
-
-				case 2:
-					ShootBullet_Bubblin2(2);
-					break;
-
-				case 3:
-					ShootBullet_Bubblin2(3);
-					break;
-			}
-
+			// MOD: Bubbler now only uses the Level 1 shooting function 
+			// regardless of its actual level.
+			ShootBullet_Bubblin1();
 			break;
 
 		case 9:
-			switch (gArmsData[gSelectedArms].level)
-			{
-				case 1:
-					ShootBullet_Sword(1);
-					break;
-
-				case 2:
-					ShootBullet_Sword(2);
-					break;
-
-				case 3:
-					ShootBullet_Sword(3);
-					break;
-			}
-
+			// Standard Sword logic
+			if (arm_level == 1)
+				ShootBullet_Sword(1);
+			else if (arm_level == 2)
+				ShootBullet_Sword(2);
+			else if (arm_level == 3)
+				ShootBullet_Sword(3);
 			break;
 
 		case 10:
-			ShootBullet_Missile(gArmsData[gSelectedArms].level, TRUE);
+			// Redirected to new custom Super Missile logic
+			//ShootBullet_SuperMissile(arm_level); // Address: 0x493A00
 			break;
 
 		case 12:
-			ShootBullet_Nemesis(gArmsData[gSelectedArms].level);
+			// MOD: Nemesis replaced by the Sword.
+			ShootBullet_Sword(arm_level);
 			break;
 
 		case 13:
-			ShootBullet_Spur(gArmsData[gSelectedArms].level);
+			ShootBullet_Spur(arm_level);
 			break;
 	}
 }

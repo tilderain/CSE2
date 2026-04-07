@@ -26,11 +26,56 @@ BULLET gBul[BULLET_MAX];
 #include "ArmsItem.h"
 #include "KeyControl.h"
 #include "Random.h"
+// Custom Bullet Cull/Limiter function (sub_494620)
+// a1: The Bullet ID to search for
+// a2: The maximum number of those bullets allowed to remain "healthy"
+void CullExtraBullets(int bullet_code, int limit)
+{
+	int i;
+	int found_count = 0;
+
+	for (i = 0; i < BULLET_MAX; ++i)
+	{
+		// Check if the bullet matches the requested ID 
+		// and has traveled for more than 16 frames (offset 0x4C / count1)
+		if (gBul[i].code_bullet == bullet_code && gBul[i].count1 > 16)
+		{
+			found_count++;
+
+			// If we have reached the allowed limit, stop processing
+			if (found_count >= limit)
+				return;
+
+			// Otherwise, "kill" the bullet by setting its remaining 
+			// lifespan to 1 frame (offset 0x54 / life_count)
+			gBul[i].life_count = 1;
+		}
+	}
+}
 
 // Mod-specific Global Variables used for the Custom Bubbler logic
-unsigned char gCustomWeaponState = 0;
+unsigned char gGrappleState = 0;
 unsigned char gCustomWeaponDir = 0;
 
+// If you need the exact 64-bit behavior to match the ASM precisely:
+typedef struct { int level; int exp; } LevelExp;
+
+LevelExp GetArmsLevelAndExp(int code)
+{
+	LevelExp result = { 0, 0 };
+
+	for (int i = 0; i < 8; ++i)
+	{
+		if (gArmsData[i].code == code)
+		{
+			result.level = gArmsData[i].level;
+			result.exp = gArmsData[i].exp;
+			break;
+		}
+	}
+
+	return result;
+}
 
 void ActBullet_FireBall_Meteor(BULLET *bul)
 {
@@ -215,111 +260,198 @@ void ActBullet_MachineGun(BULLET *bul, int level)
 		}
 	}
 }
-
+// Helper to get the level of the Bubbler (ID 7)
+int GetBubblerLevel(void)
+{
+	for (int i = 0; i < 8; ++i)
+	{
+		if (gArmsData[i].code == 7)
+			return gArmsData[i].level;
+	}
+	return 0;
+}
 //-----------------------------------------------------
 // Custom Bubbler logic (Bullet 19, 20, 21)
 //-----------------------------------------------------
-void ActBullet_CustomBubbler(BULLET *bul)
+// New global variables used for weapon effects (e.g., a tether line or beam origin)
+extern int gGrappleX; // dword_4937F8
+extern int gGrappleY; // dword_4937FC
+
+// Custom helper for the new Bubbler-replacement weapon
+void UpdateTetherPosition(BULLET *bul)
 {
-	int wpn_lvl = 0;
-	for (int i = 0; i < ARMS_MAX; ++i)
+	int x = bul->x;
+	int y = bul->y;
+
+	// byte_493805 is the 8-way direction captured when firing
+	switch (gCustomWeaponDir)
 	{
-		if (gArmsData[i].code == 7) // 7 = Bubbler
-		{
-			wpn_lvl = gArmsData[i].level;
+		case 1: // Up
+			x += 9 * 0x200;
+			y += 16 * 0x200;
 			break;
-		}
+
+		case 2: // Right
+			x += 1 * 0x200;
+			y += 9 * 0x200;
+			break;
+
+		case 3: // Down
+			x += 9 * 0x200;
+			y += 1 * 0x200;
+			break;
+
+		case 4: // Up-Left
+			x += 16 * 0x200;
+			y += 16 * 0x200;
+			break;
+
+		case 5: // Up-Right
+			x += 1 * 0x200;
+			y += 16 * 0x200;
+			break;
+
+		case 6: // Down-Right
+			x += 1 * 0x200;
+			y += 1 * 0x200;
+			break;
+
+		case 7: // Down-Left
+			x += 16 * 0x200;
+			y += 1 * 0x200;
+			break;
+
+		default: // 0: Left
+			x += 16 * 0x200;
+			y += 9 * 0x200;
+			break;
 	}
 
-	bul->damage = (wpn_lvl + 3) / 2;
-	bul->life_count = wpn_lvl * 2 + 10;
+	// Store the calculated point in global variables for the renderer
+	gGrappleX = x;
+	gGrappleY = y;
+}
+// Unified logic for custom Bubbler shots (sub_406000)
+void ActBullet_CustomBubbler(BULLET *bul)
+{
+	int level = GetBubblerLevel();
 
-	if (gCustomWeaponState == 1)
+	// Set dynamic damage and lifetime based on current Bubbler Level
+	bul->damage = (level + 3) / 2;
+	bul->life_count = (2 * level) + 10;
+
+	// STATE 1: PROJECTILE IS FIRING
+	if (gGrappleState == 1)
 	{
 		if (bul->act_no == 1)
 		{
-			if ((bul->flag & 0xF) == 0)
+			// Check for wall collision
+			if (bul->flag & 0xF)
 			{
-				bul->count1++;
-				if (bul->count1 < bul->life_count)
+				PlaySoundObject(31, SOUND_MODE_PLAY); // Projectile clink
+				SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
+				gGrappleState = 3; // Trigger cleanup
+			}
+			else if (++bul->count1 < bul->life_count)
+			{
+				// Play firing sound every 5 frames while active
+				if (--bul->act_wait <= 0)
 				{
-					bul->act_wait--;
-					if (bul->act_wait < 1)
-					{
-						bul->act_wait = 5;
-						PlaySoundObject(100, SOUND_MODE_PLAY); // 100 SND_BUBBLER_LAUNCH
-					}
-					bul->x += bul->xm;
-					bul->y += bul->ym;
-					
-					RECT rc = {0, 48, 16, 64};
-					rc.left += gCustomWeaponDir * 16;
-					rc.right += gCustomWeaponDir * 16;
-					bul->rect = rc;
-					return;
+					bul->act_wait = 5;
+					PlaySoundObject(100, SOUND_MODE_PLAY); // Bubbler hum
 				}
+
+				bul->x += bul->xm;
+				bul->y += bul->ym;
+
+				// Sprite logic: Pulls 16x16 frames from a row at Y=48
+				// The X position is determined by the 8-way direction variable
+				bul->rect.left = gCustomWeaponDir * 16;
+				bul->rect.top = 48;
+				bul->rect.right = bul->rect.left + 16;
+				bul->rect.bottom = 64;
+
+				// sub_4064B0 is a custom mod helper for trailing effects/positioning
+				UpdateTetherPosition(bul); 
+				return;
 			}
 			else
 			{
-				PlaySoundObject(31, SOUND_MODE_PLAY); // 0x1F SND_PROJECTILE_HIT
-				SetCaret(bul->x, bul->y, CARET_SHOOT, DIR_LEFT);
+				gGrappleState = 3; // Lifetime expired
 			}
-			
-			gCustomWeaponState = 3;
 		}
 		else
 		{
-			int xm = 0, ym = 0;
-			
+			// Initialization (act_no 0)
+			// Assign velocities based on the 8-way direction captured when firing
+			int xm = 0;
+			int ym = 0;
+
 			switch (gCustomWeaponDir)
 			{
-				case 0: xm = -0xF00; break;
-				case 1: ym = -0xF00; break;
-				case 2: xm =  0xF00; break;
-				case 3: ym =  0xF00; break;
-				case 4: xm = -0xD00; ym = -0xD00; break;
-				case 5: xm =  0xD00; ym = -0xD00; break;
-				case 6: xm =  0xD00; ym =  0xD00; break;
-				case 7: xm = -0xD00; ym =  0xD00; break;
+				case 1: ym = -3840; break; // Up
+				case 2: xm = 3840;  break; // Right
+				case 3: ym = 3840;  break; // Down
+				case 4: xm = -3328; ym = -3328; break; // Up-Left
+				case 5: xm = 3328;  ym = -3328; break; // Up-Right
+				case 6: xm = 3328;  ym = 3328;  break; // Down-Right
+				case 7: xm = -3328; ym = 3328;  break; // Down-Left
+				default: xm = -3840; break;            // Left
 			}
-			
+
 			bul->xm = xm;
 			bul->ym = ym;
 			bul->act_no = 1;
+			UpdateTetherPosition(bul);
 		}
 		return;
 	}
-	
-	if (gCustomWeaponState != 2)
+
+	// STATE 2: PHYSICS BOOST / JETPACK MODE
+	if (gGrappleState == 2)
 	{
-		if (gCustomWeaponState == 3)
-			gCustomWeaponState = 0;
-		else
-			bul->cond = 0;
-			
-		return;
-	}
-	
-	bul->life = 100;
-	
-	if (gSelectedArms == 5)
-	{
-		if (!(gKey & gKeyShot)) { /* Do nothing */ }
+		bul->life = 100;
+
+		// This is a hidden cross-weapon synergy in the mod. 
+		// If you have the Machine Gun (Arms ID 5) selected and aren't shooting:
+		if (gSelectedArms == 5)
+		{
+			if (!(gKey & gKeyShot))
+			{
+				// Holding Jump provides a 20% horizontal and 14% vertical velocity boost
+				if (gKey & gKeyJump)
+				{
+					gMC.xm += gMC.xm / 5;
+					gMC.ym += gMC.ym / 7;
+				}
+				// Transition to cleanup if jump is released
+				goto BoostCleanup;
+			}
+		}
 		else if (gKey & gKeyJump)
 		{
-			// Acts like a jetpack!
-			gMC.xm += gMC.xm / 5;
-			gMC.ym += gMC.ym / 7;
+		BoostCleanup:
+			gGrappleState = 3;
 		}
+
+		// Hide the projectile while boosting
+		bul->rect.left = 0;
+		bul->rect.top = 0;
+		bul->rect.right = 0;
+		bul->rect.bottom = 0;
+		return;
 	}
-	else if (!(gKey & gKeyJump)) { /* Do nothing */ }
+
+	// STATE 3: CLEANUP
+	if (gGrappleState == 3)
+	{
+		gGrappleState = 0;
+	}
 	else
 	{
-		gCustomWeaponState = 3;
+		// Delete the bullet object
+		bul->cond = 0;
 	}
-	
-	RECT rcEmpty = {0, 0, 0, 0};
-	bul->rect = rcEmpty;
 }
 
 

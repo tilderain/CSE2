@@ -36,6 +36,7 @@ ARMS_LEVEL gArmsLevelTable[14] =
     {{1,   10, 20}},   // 4936FC: 01, 0A, 14
 };
 
+// Modded AddExpMyChar
 void AddExpMyChar(int x)
 {
 	int lv = gArmsData[gSelectedArms].level - 1;
@@ -43,7 +44,40 @@ void AddExpMyChar(int x)
 
 	gArmsData[gSelectedArms].exp += x;
 
-	if (lv == 2)
+	// [MOD] New logic: Handle losing EXP (Leveling Down)
+	if (x < 0)
+	{
+		// Iterate backwards through levels if EXP is negative
+		for (; lv > -1; --lv)
+		{
+			if (gArmsData[gSelectedArms].exp < 0)
+			{
+				// If we can level down
+				if (gArmsData[gSelectedArms].level > 1)
+				{
+					--gArmsData[gSelectedArms].level;
+					int new_lv_idx = gArmsData[gSelectedArms].level - 1;
+
+					// Set EXP to the max of the previous level, 
+					// then apply the remaining negative overflow
+					gArmsData[gSelectedArms].exp = gArmsLevelTable[arms_code].exp[new_lv_idx] + gArmsData[gSelectedArms].exp;
+					
+					if (gArmsData[gSelectedArms].exp < 0)
+						gArmsData[gSelectedArms].exp = 0;
+
+					PlaySoundObject(29, SOUND_MODE_PLAY); // 0x1D Level Down sound
+					SetCaret(gMC.x, gMC.y, 10, 1);       // Caret 10, Dir 1 (Level Down "cloud")
+				}
+				else
+				{
+					// At Level 1, just clamp to 0
+					gArmsData[gSelectedArms].exp = 0;
+				}
+			}
+		}
+	}
+	// Logic for Max Level (unchanged from vanilla logic, but thresholds might differ in mod)
+	else if (lv == 2)
 	{
 		if (gArmsData[gSelectedArms].exp >= gArmsLevelTable[arms_code].exp[lv])
 		{
@@ -56,6 +90,7 @@ void AddExpMyChar(int x)
 			}
 		}
 	}
+	// Logic for Leveling Up (Standard)
 	else
 	{
 		for (; lv < 2; ++lv)
@@ -64,24 +99,27 @@ void AddExpMyChar(int x)
 			{
 				++gArmsData[gSelectedArms].level;
 				gArmsData[gSelectedArms].exp = 0;
-
+3
+				// Don't play level-up sound/caret for the Spur (ID 13)
 				if (gArmsData[gSelectedArms].code != 13)
 				{
-					PlaySoundObject(27, SOUND_MODE_PLAY);
-					SetCaret(gMC.x, gMC.y, 10, 0);
+					PlaySoundObject(27, SOUND_MODE_PLAY); // 0x1B Level Up sound
+					SetCaret(gMC.x, gMC.y, 10, 0);       // Caret 10, Dir 0 (Level Up "cloud")
 				}
 			}
 		}
 	}
 
-	if (gArmsData[gSelectedArms].code != 13)
+	// UI Feedback
+	if (gArmsData[gSelectedArms].code == 13) // Spur
 	{
-		gMC.exp_count += x;
-		gMC.exp_wait = 30;
+		gMC.exp_wait = 10;
 	}
 	else
 	{
-		gMC.exp_wait = 10;
+		// [MOD] Negative x will now correctly reduce the orange floating EXP number
+		gMC.exp_count += x;
+		gMC.exp_wait = 30; // 0x1E
 	}
 }
 

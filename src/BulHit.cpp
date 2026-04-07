@@ -347,10 +347,10 @@ int JudgeHitBulletTriangleH(int x, int y, BULLET *bul)
 
 // Mod-specific Global Variables (Likely for a Harpoon or Grapple weapon)
  extern unsigned char gGrappleState;
- int gGrappleDist;
- int gGrappleTgtX;
- int gGrappleTgtY;
- int gGrappleUnk;
+ extern int gGrappleLength;
+ extern int gGrappleX;
+ extern int gGrappleY;
+ extern int gGrappleMomentum;
 
  #include "Map.h"
  #include "MyChar.h"
@@ -382,13 +382,13 @@ int FUN_00494770(int tx, int ty, BULLET *bul)
         if (bul->code_bullet != 19 || gGrappleState != 1)
             return hit;
 
-        gGrappleUnk   = 0;
+        gGrappleMomentum   = 0;
         gGrappleState = 2;
 
         int snap_x = (tx * 16 + 5) * 0x200;
         int snap_y = (ty * 16 + 5) * 0x200;
-        gGrappleTgtX = snap_x;
-        gGrappleTgtY = snap_y;
+        gGrappleX = snap_x;
+        gGrappleY = snap_y;
         bul->x = snap_x;
         bul->y = snap_y;
 
@@ -402,7 +402,7 @@ int FUN_00494770(int tx, int ty, BULLET *bul)
         if (dist > 0xc000) dist = 0xc000;
         if (dist < 0x1000) dist = 0x1000;
 
-        gGrappleDist = dist;
+        gGrappleLength = dist;
         return hit;
     }
     else if (atrb == 0x43)

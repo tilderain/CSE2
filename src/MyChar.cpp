@@ -187,20 +187,63 @@ void ShowMyChar(BOOL bShow)
 	else
 		gMC.cond |= 2;
 }
-
+extern char gGrappleState;   // byte_493804
 void PutMyChar(int fx, int fy)
 {
+	int i;
 	int arms_offset_y;
+	int hand_x, hand_y;
+	int diff_x, diff_y;
+	int step_x, step_y;
+	int draw_x, draw_y;
 
+	// New global variables for the Grapple/Tether system
+	// These correspond to the addresses found in the mod's code cave
+
+	extern unsigned char gCustomWeaponDir;     // byte_493805
+	extern int gGrappleX;                // dword_4937F8
+	extern int gGrappleY;                // dword_4937FC
+	extern int gGrappleLength;             // dword_493818
+
+	// Standard conditions: Don't draw if Quote is inactive or hidden
 	if (!(gMC.cond & 0x80) || gMC.cond & 2)
 		return;
 
-	// Draw weapon
+	// [MOD] Grapple Orientation Logic
+	// Force Quote to look at/aim toward the anchor point if State is 2 (Attached)
+	if (gGrappleState == 2 && gSelectedArms == 5)
+	{
+		int centerX = gGrappleX + (gGrappleLength / 2);
+
+		if (gMC.x < centerX && centerX - gGrappleLength < gMC.x)
+		{
+			// Directly above or below the anchor
+			gMC.down = (gMC.y <= gGrappleY);
+			gMC.up = !gMC.down;
+			gMC.ani_no = gMC.down ? 10 : 6;
+		}
+		else
+		{
+			// Aiming diagonally or horizontally toward the anchor
+			gMC.down = (gMC.y <= gGrappleY);
+			gMC.up = !gMC.down;
+			gMC.direct = (gMC.x < gGrappleX) ? 2 : 0;
+			gMC.ani_no = 6;
+		}
+	}
+
+	// Weapon Sprite Calculation
 	gMC.rect_arms.left = (gArmsData[gSelectedArms].code % 13) * 24;
 	gMC.rect_arms.right = gMC.rect_arms.left + 24;
 	gMC.rect_arms.top = (gArmsData[gSelectedArms].code / 13) * 96;
+
+	// [MOD] If Grapple is active, shift to the specialized weapon row (+96)
+	if (gSelectedArms == 5 && gGrappleState != 0)
+		gMC.rect_arms.top += 96;
+
 	gMC.rect_arms.bottom = gMC.rect_arms.top + 16;
 
+	// Standard Direction/Aiming logic using modded 24x96 per-weapon layout
 	if (gMC.direct == 2)
 	{
 		gMC.rect_arms.top += 16;
@@ -224,58 +267,107 @@ void PutMyChar(int fx, int fy)
 		arms_offset_y = 0;
 	}
 
+	// Nudge weapon 1px if stepping
 	if (gMC.ani_no == 1 || gMC.ani_no == 3 || gMC.ani_no == 6 || gMC.ani_no == 8)
 		++gMC.rect_arms.top;
 
+	// Draw Weapon
 	if (gMC.direct == 0)
-		PutBitmap3(
-			&grcGame,
+		PutBitmap3(&grcGame,
 			SubpixelToScreenCoord(gMC.x - gMC.view.front) - SubpixelToScreenCoord(fx) - PixelToScreenCoord(8),
 			SubpixelToScreenCoord(gMC.y - gMC.view.top) - SubpixelToScreenCoord(fy) + PixelToScreenCoord(arms_offset_y),
-			&gMC.rect_arms,
-			SURFACE_ID_ARMS);
+			&gMC.rect_arms, SURFACE_ID_ARMS);
 	else
-		PutBitmap3(
-			&grcGame,
+		PutBitmap3(&grcGame,
 			SubpixelToScreenCoord(gMC.x - gMC.view.front) - SubpixelToScreenCoord(fx),
 			SubpixelToScreenCoord(gMC.y - gMC.view.top) - SubpixelToScreenCoord(fy) + PixelToScreenCoord(arms_offset_y),
-			&gMC.rect_arms,
-			SURFACE_ID_ARMS);
+			&gMC.rect_arms, SURFACE_ID_ARMS);
 
+	// Handle Damage Flash
 	if (gMC.shock / 2 % 2)
 		return;
 
-	// Draw player
+	// Draw Player Body
 	RECT rect = gMC.rect;
 	rect.top += 32 * gMIMCurrentNum;
 	rect.bottom += 32 * gMIMCurrentNum;
-#ifndef ENABLE_MIM_DISABLE_EQUIP_40_GRAPHICS
+
 	if (gMC.equip & EQUIP_MIMIGA_MASK)
 	{
 		rect.top += 32;
 		rect.bottom += 32;
 	}
-#endif
 
-	PutBitmap3(&grcGame, SubpixelToScreenCoord(gMC.x - gMC.view.front) - SubpixelToScreenCoord(fx), SubpixelToScreenCoord(gMC.y - gMC.view.top) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_MY_CHAR);
+	PutBitmap3(&grcGame,
+		SubpixelToScreenCoord(gMC.x - gMC.view.front) - SubpixelToScreenCoord(fx),
+		SubpixelToScreenCoord(gMC.y - gMC.view.top) - SubpixelToScreenCoord(fy),
+		&rect, SURFACE_ID_MY_CHAR);
 
-	// Draw air tank
-	RECT rcBubble[2] = {
-		{56, 96, 80, 120},
-		{80, 96, 104, 120},
-	};
-
+	// Draw Air Tank / Bubbles
+	RECT rcBubble[2] = { {56, 96, 80, 120}, {80, 96, 104, 120} };
 	++gMC.bubble;
-	if (gMC.equip & EQUIP_AIR_TANK && gMC.flag & 0x100)
-		PutBitmap3(&grcGame, SubpixelToScreenCoord(gMC.x) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fx), SubpixelToScreenCoord(gMC.y) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fy), &rcBubble[(gMC.bubble / 2) % 2], SURFACE_ID_CARET);
-	else if (gMC.unit == 1)
-		PutBitmap3(&grcGame, SubpixelToScreenCoord(gMC.x) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fx), SubpixelToScreenCoord(gMC.y) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fy), &rcBubble[(gMC.bubble / 2) % 2], SURFACE_ID_CARET);
-}
+	if ((gMC.equip & EQUIP_AIR_TANK && gMC.flag & 0x100) || gMC.unit == 1)
+	{
+		PutBitmap3(&grcGame,
+			SubpixelToScreenCoord(gMC.x) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fx),
+			SubpixelToScreenCoord(gMC.y) - PixelToScreenCoord(12) - SubpixelToScreenCoord(fy),
+			&rcBubble[(gMC.bubble / 2) % 2], SURFACE_ID_CARET);
+	}
 
+	// [MOD] Grapple Rope Rendering
+	if (gGrappleState != 0)
+	{
+		// 1. Determine "Hand" position (Where rope connects to the gun)
+		if (gSelectedArms == 5)
+		{
+			if (gMC.up == 0 && gMC.down == 0)
+			{
+				// Horizontal
+				draw_y = gMC.y + 0x1000;
+				draw_x = (gMC.direct == 0) ? -0x400 : 0xC00;
+				draw_x = (draw_x * 2) + gMC.x;
+			}
+			else
+			{
+				// Vertical/Diagonal
+				draw_x = gMC.x + ((gMC.direct == 0) ? 0x400 : 0x1200);
+				draw_y = gMC.y + (gMC.up ? -0x600 : 0x1800);
+			}
+		}
+		else
+		{
+			// Default fallback for other weapons
+			draw_x = gMC.x + gMC.view.front;
+			draw_y = gMC.y + gMC.view.bottom;
+		}
+
+		// 2. Linear Interpolation for 32 Rope Segments
+		diff_x = gGrappleX - draw_x;
+		diff_y = gGrappleY - draw_y;
+		
+		step_x = diff_x / 32;
+		step_y = diff_y / 32;
+
+		// 0xC0, 0x18, 0xC6, 0x1E
+		RECT rcRope = { 192, 24, 198, 30 }; 
+
+		for (i = 0; i < 32; ++i)
+		{
+			// Increment segment position
+			draw_x += step_x;
+			draw_y += step_y;
+
+			PutBitmap3(&grcGame,
+				SubpixelToScreenCoord(draw_x - gMC.view.front) - SubpixelToScreenCoord(fx),
+				SubpixelToScreenCoord(draw_y - gMC.view.top) - SubpixelToScreenCoord(fy),
+				&rcRope, SURFACE_ID_MY_CHAR);
+		}
+	}
+}
 #include <math.h>
 
 // Modder-added Global Variables (mapped to addresses in the 0x49xxxx range)
-int gGrappleState;      // DAT_00493804 (0 = Normal, 2 = Grappling)
+extern char gGrappleState;      // DAT_00493804 (0 = Normal, 2 = Grappling)
 int gGrappleX;          // DAT_004937f8 (Pivot X coordinate)
 int gGrappleY;          // DAT_004937fc (Pivot Y coordinate)
 int gGrappleLength;     // DAT_00493818 (Length of the rope)
