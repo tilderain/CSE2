@@ -50,29 +50,20 @@ void AddExpMyChar(int x)
 		// Iterate backwards through levels if EXP is negative
 		for (; lv > -1; --lv)
 		{
-			if (gArmsData[gSelectedArms].exp < 0)
+			if (gArmsData[gSelectedArms].exp <= 0)
 			{
-				// If we can level down
-				if (gArmsData[gSelectedArms].level > 1)
-				{
-					--gArmsData[gSelectedArms].level;
-					int new_lv_idx = gArmsData[gSelectedArms].level - 1;
+				--gArmsData[gSelectedArms].level;
+				int new_lv_idx = gArmsData[gSelectedArms].level - 1;
 
-					// Set EXP to the max of the previous level, 
-					// then apply the remaining negative overflow
-					gArmsData[gSelectedArms].exp = gArmsLevelTable[arms_code].exp[new_lv_idx] + gArmsData[gSelectedArms].exp;
-					
-					if (gArmsData[gSelectedArms].exp < 0)
-						gArmsData[gSelectedArms].exp = 0;
-
-					PlaySoundObject(29, SOUND_MODE_PLAY); // 0x1D Level Down sound
-					SetCaret(gMC.x, gMC.y, 10, 1);       // Caret 10, Dir 1 (Level Down "cloud")
-				}
-				else
-				{
-					// At Level 1, just clamp to 0
+				// Set EXP to the max of the previous level, 
+				// then apply the remaining negative overflow
+				gArmsData[gSelectedArms].exp = gArmsLevelTable[arms_code].exp[new_lv_idx] + gArmsData[gSelectedArms].exp;
+				
+				if (gArmsData[gSelectedArms].exp < 0)
 					gArmsData[gSelectedArms].exp = 0;
-				}
+
+				PlaySoundObject(29, SOUND_MODE_PLAY); // 0x1D Level Down sound
+				SetCaret(gMC.x, gMC.y, 10, 1);       // Caret 10, Dir 1 (Level Down "cloud")
 			}
 		}
 	}

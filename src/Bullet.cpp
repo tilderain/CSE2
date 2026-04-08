@@ -1772,80 +1772,123 @@ void ActBullet_Bubblin3(BULLET *bul)
 
 	bul->rect = rect[bul->ani_no];
 }
-
-void ActBullet_Spine(BULLET *bul)
+void ActBullet_Spine(BULLET *bul, int a2)
 {
-	if (++bul->count1 > bul->life_count || bul->flag & 8)
-	{
-		bul->cond = 0;
-		SetCaret(bul->x, bul->y, 3, 0);
-		return;
-	}
+	int bBounce; // Ensures sound only plays when a bounce occurs
 
 	if (bul->act_no == 0)
 	{
 		bul->act_no = 1;
 
+		int min_drift, max_drift;
+
+		// If Quote is on the ground (0x3D), not aiming up/down, and standing/walking
+		if (gMC.up == 0 && gMC.down == 0 && (gMC.flag & 0x3D) && gMC.ani_no < 4)
+		{
+			max_drift = 0xA0;
+			min_drift = -0x250;
+		}
+		else
+		{
+			max_drift = 0x300;
+			min_drift = -0x300;
+		}
+
+		int drift = Random(min_drift, max_drift);
+		int speed = Random(0x6FF, 0x8FF);
+
 		switch (bul->direct)
 		{
-			case 0:
-				bul->xm = (-Random(10, 16) * 0x200) / 2;
+			case 0: // Left
+				bul->xm = -speed;
+				bul->ym = drift;
 				break;
-			case 1:
-				bul->ym = (-Random(10, 16) * 0x200) / 2;
+			case 1: // Up
+				bul->ym = -speed;
+				bul->xm = drift;
 				break;
-			case 2:
-				bul->xm = (Random(10, 16) * 0x200) / 2;
+			case 2: // Right
+				bul->xm = speed;
+				bul->ym = drift;
 				break;
-			case 3:
-				bul->ym = (Random(10, 16) * 0x200) / 2;
+			case 3: // Down
+				bul->ym = speed;
+				bul->xm = drift;
 				break;
 		}
 	}
-	else
+
+	// Bouncing Logic
+	if (bul->direct == 1 || bul->direct == 3) // Fired Vertically (Up/Down)
 	{
-		bul->x += bul->xm;
-		bul->y += bul->ym;
+		if (bul->flag & 5) // Hit a left or right wall (Parallel)
+		{
+			bul->life--;
+			bul->xm = -bul->tgt_x; // Reverse X velocity
+			bBounce = 1;
+		}
+		if (bul->flag & 0xA) // Hit a ceiling or floor (Perpendicular)
+		{
+			bul->life = 0; // Destroy
+			bBounce = 1;
+		}
+	}
+	else // Fired Horizontally (Left/Right)
+	{
+		if (bul->flag & 5) // Hit a left or right wall (Perpendicular)
+		{
+			bul->life = 0; // Destroy
+			bBounce = 1;
+		}
+		if (bul->flag & 0xA) // Hit a ceiling or floor (Parallel)
+		{
+			bul->life--;
+			bul->ym = -bul->tgt_y; // Reverse Y velocity
+			bBounce = 1;
+		}
 	}
 
-	if (++bul->ani_wait > 1)
+	// Apply movement
+	bul->x += bul->xm;
+	bul->tgt_x = bul->xm; // Backup velocity for the next frame's bounce check
+
+	bul->y += bul->ym;
+	bul->tgt_y = bul->ym;
+
+	// Play bounce sound
+	if (bBounce)
 	{
-		bul->ani_wait = 0;
-		++bul->ani_no;
+		PlaySoundObject(61, SOUND_MODE_PLAY); // 0x3D
 	}
 
-	if (bul->ani_no > 1)
+	// Handle destruction
+	if (bul->life == 0)
+	{
+		bul->cond = 0;
+		SetCaret(bul->x, bul->y, CARET_PROJECTILE_DISSIPATION, DIR_LEFT); // 15
+	}
+
+	// Fast 2-frame animation logic
+	bul->ani_wait ^= 1;
+	bul->ani_no += bul->ani_wait;
+
+	if (bul->ani_no > 3)
 		bul->ani_no = 0;
 
-	RECT rcLeft[2] = {
-		{224, 0, 232, 8},
-		{232, 0, 240, 8},
-	};
+	// Dynamic RECT calculation based on the 'a2' parameter
+	int rect_top = 8 * (a2 - 1);
+	bul->rect.top = rect_top;
+	bul->rect.bottom = rect_top + 8;
 
-	RECT rcRight[2] = {
-		{224, 0, 232, 8},
-		{232, 0, 240, 8},
-	};
+	int rect_left = 8 * bul->ani_no;
+	bul->rect.left = rect_left;
+	bul->rect.right = rect_left + 8;
 
-	RECT rcDown[2] = {
-		{224, 8, 232, 16},
-		{232, 8, 240, 16},
-	};
-
-	switch (bul->direct)
+	// Lifespan timer check at the very end
+	bul->count1++;
+	if (bul->count1 > bul->life_count)
 	{
-		case 0:
-			bul->rect = rcLeft[bul->ani_no];
-			break;
-		case 1:
-			bul->rect = rcDown[bul->ani_no];
-			break;
-		case 2:
-			bul->rect = rcRight[bul->ani_no];
-			break;
-		case 3:
-			bul->rect = rcDown[bul->ani_no];
-			break;
+		bul->cond = 0;
 	}
 }
 void ActBullet_Sword1(BULLET *bul)
@@ -2180,94 +2223,106 @@ void ActBullet_Sword3(BULLET *bul)
 unsigned char gSwordState; 
 
 
+
 void ActBullet_Edge(BULLET *bul)
 {
+	int level = 0;
+	for (int i = 0; i < ARMS_MAX; ++i)
+		if (gArmsData[i].code == 9) { level = gArmsData[i].level; break; }
+
 	// Initialization
 	if (bul->act_no != 1)
 	{
 		bul->act_no = 1;
-		bul->act_wait = 4; // Damage frequency timer
+		bul->act_wait = 4; // Timer for hit registration
 		
-		// Alternates the sword "state" toggle every time a new slash is created
+		// Alternate the swing state (for visual variety)
 		if (gSwordState == 0)
 			gSwordState = 1;
 		else
 			gSwordState = 0;
 	}
 
-	// Pin the bullet to Quote's current position
+	// Lock the slash to Quote's position
 	bul->x = gMC.x;
 	bul->y = gMC.y;
 
-	// Position the slash in front of Quote based on aiming direction
-	if (gMC.down)
+	// Position the slash hitbox based on aiming direction
+	if (gMC.down == 0)
 	{
-		// Aiming Down
-		if (gMC.direct == DIR_LEFT)
+		if (gMC.up == 0)
 		{
-			bul->x -= 0x1000; // 8 pixels left
-			bul->y += 0x2200; // 17 pixels down
+			// Aiming Horizontally
+			if (gMC.direct == 0) // Left
+			{
+				bul->x -= 0x1000; // 8 pixels
+				bul->y -= 0x200;  // 1 pixel
+			}
+			else // Right
+			{
+				bul->x += 0x1000;
+				bul->y -= 0x200;
+			}
 		}
 		else
 		{
-			bul->x += 0x1000; // 8 pixels right
-			bul->y += 0x2800; // 20 pixels down
-		}
-	}
-	else if (gMC.up)
-	{
-		// Aiming Up
-		if (gMC.direct == DIR_LEFT)
-		{
-			bul->x -= 0x1400; // 10 pixels left
-			bul->y -= 0x2200; // 17 pixels up
-		}
-		else
-		{
-			bul->x += 0x1400; // 10 pixels right
-			bul->y -= 0x2800; // 20 pixels up
+			// Aiming Up
+			if (gMC.direct == 0)
+			{
+				bul->x -= 0xA00;  // 5 pixels
+				bul->y -= 0x1100; // 8.5 pixels
+			}
+			else
+			{
+				bul->x += 0xA00;
+				bul->y -= 0x1400; // 10 pixels
+			}
 		}
 	}
 	else
 	{
-		// Aiming Horizontally
-		if (gMC.direct == DIR_LEFT)
+		// Aiming Down (Airborne)
+		if (gMC.direct == 0)
 		{
-			bul->x -= 0x2000; // 16 pixels left
-			bul->y -= 0x400;  // 2 pixels up
+			bul->x -= 0x800;  // 4 pixels
+			bul->y += 0x1100; // 8.5 pixels
 		}
 		else
 		{
-			bul->x += 0x2000; // 16 pixels right
-			bul->y -= 0x400;  // 2 pixels up
+			bul->x += 0x800;
+			bul->y += 0x1400; // 10 pixels
 		}
 	}
 
-	// Logic: Animation Speed scaling by Weapon Level (Weapon ID 9)
-	bul->count1++; 
-	int level = 0;
-	for (int i = 0; i < ARMS_MAX; ++i)
-		if (gArmsData[i].code == 9) { level = gArmsData[i].level; break; }
-
-	// Assembly logic: (3 - level) < count1 determines frame advance speed
-	// Level 3 slashes move frames much faster than Level 1.
-	if ((3 - level) < bul->count1)
+	// Animation Speed: Scales with Weapon Level
+	// Level 1: 3 - 1 = 2 frames per animation tick
+	// Level 2: 3 - 2 = 1 frame per animation tick
+	// Level 3: 3 - 3 = 0 frames (Extremely fast, updates every frame)
+	bul->ani_wait++;
+	if (bul->ani_wait > (3 - level))
 	{
-		bul->count1 = 0;
+		bul->ani_wait = 0;
 		bul->ani_no++;
 	}
 
-	// Logic: Damage / Hitbox frequency
-	if (--bul->act_wait == 0)
+	// Damage Application Timer
+	// The sword pulses damage rapidly instead of just hitting once
+	bul->act_wait--;
+	if (bul->act_wait == 0)
 	{
 		if (bul->damage != 0)
 		{
+			// Damage was dealt last frame, turn hitbox off to allow invincibility frames to expire
 			bul->act_wait = 4;
 			bul->damage = 0;
 		}
 		else
 		{
-			// Damage scaling formula from ASM: (level * level) + 8
+			// Turn hitbox on
+			// Formula: (Level * Level) + 8
+			// Lv 1 = 9 damage
+			// Lv 2 = 12 damage
+			// Lv 3 = 17 damage
 			bul->damage = (level * level) + 8;
 			bul->act_wait = 1;
 		}
@@ -2277,46 +2332,54 @@ void ActBullet_Edge(BULLET *bul)
 		bul->damage = 0;
 	}
 
-	// Destroy slash after 5 frames of animation
+	// Destroy slash when animation finishes (5 frames)
 	if (bul->ani_no > 4)
 	{
 		bul->cond = 0;
 		return;
 	}
 
-	// Correct RECT Tables (Restored from assembly stack logic)
-	// These frames are 24x24 pixels wide.
-	static const RECT rcLeft[] = {
+	// Graphic RECT processing (24x24 sprites)
+	// Extracted from the complex stack allocation in the ASM
+	static const RECT rcLeft[5] = {
 		{0, 64, 24, 88}, {24, 64, 48, 88}, {48, 64, 72, 88}, {72, 64, 96, 88}, {96, 64, 120, 88}
 	};
-	static const RECT rcRight[] = {
+	static const RECT rcRight[5] = {
 		{0, 88, 24, 112}, {24, 88, 48, 112}, {48, 88, 72, 112}, {72, 88, 96, 112}, {96, 88, 120, 112}
 	};
-	static const RECT rcUp[] = {
+	static const RECT rcUp[5] = {
 		{0, 112, 24, 136}, {24, 112, 48, 136}, {48, 112, 72, 136}, {72, 112, 96, 136}, {96, 112, 120, 136}
 	};
-	static const RECT rcDown[] = {
+	static const RECT rcDown[5] = {
 		{0, 136, 24, 160}, {24, 136, 48, 160}, {48, 136, 72, 160}, {72, 136, 96, 160}, {96, 136, 120, 160}
 	};
 
-	// Determine which RECT set to use based on aiming and gSwordState
+	// Sprite Selection Logic
 	if (gMC.down)
 	{
-		bul->rect = (gMC.direct == DIR_LEFT) ? rcDown[bul->ani_no] : rcDown[bul->ani_no];
-		// Assembly note: Downwards slashes use the rcDown set directly
-	}
-	else if (!gMC.up)
-	{
-		// Horizontal: Alternates between High and Low slash animations
-		if (gMC.direct == DIR_LEFT)
-			bul->rect = (gSwordState != 0) ? rcDown[bul->ani_no] : rcLeft[bul->ani_no];
+		// Downward slash
+		if (gMC.direct == 0)
+			bul->rect = rcDown[bul->ani_no];
 		else
-			bul->rect = (gSwordState != 0) ? rcDown[bul->ani_no] : rcRight[bul->ani_no];
+			bul->rect = rcDown[bul->ani_no];
+	}
+	else if (gMC.up == 0)
+	{
+		// Horizontal slash
+		// Uses the gSwordSwingState to alternate between "Upward" and "Forward" swing animations
+		if (gMC.direct == 0)
+			bul->rect = (gSwordState != 0) ? rcUp[bul->ani_no] : rcLeft[bul->ani_no];
+		else
+			bul->rect = (gSwordState != 0) ? rcUp[bul->ani_no] : rcRight[bul->ani_no];
 	}
 	else
 	{
-		// Upwards slashes
-		bul->rect = rcUp[bul->ani_no];
+		// Upward slash
+		// Alternates between "Forward" and "Downward" swing animations
+		if (gMC.direct == 0)
+			bul->rect = (gSwordState != 0) ? rcLeft[bul->ani_no] : rcDown[bul->ani_no];
+		else
+			bul->rect = (gSwordState != 0) ? rcRight[bul->ani_no] : rcDown[bul->ani_no];
 	}
 }
 
@@ -2969,7 +3032,7 @@ void ActBullet(void)
 				case 20: ActBullet_CustomBubbler(&gBul[i]); break;
 				case 21: ActBullet_CustomBubbler(&gBul[i]); break;
 
-				case 22: ActBullet_Spine(&gBul[i]); break;
+				case 22: ActBullet_Spine(&gBul[i], gBul[i].code_bullet - 1); break;
 
 				case 23: ActBullet_Edge(&gBul[i]); break;
 

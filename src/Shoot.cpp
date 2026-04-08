@@ -1032,6 +1032,201 @@ void ShootBullet_Spur(int level)
 	}
 }
 
+
+// Custom Globals for this weapon
+int gShotgunChargeTimer; // DAT_004bba00
+int gEmptyCaretTimer;    // DAT_004a554c
+int gCustomRensha;       // A replacement for soft_rensha
+
+// Get Current Weapon's Max Ammunition
+// (In the context of the Redesign Mod, this is repurposed as a Fire Rate modifier)
+int GetCurrentArmsMaxNum(void)
+{
+	return gArmsData[gSelectedArms].max_num;
+}
+// Replaces ShootBullet_Missile when gSelectedArms code == 10
+void ShootBullet_Sparkler(int level)
+{
+
+	int new_xm;
+	int new_ym;
+
+	bool alt_fire = false;
+	int b_x, b_y, b_dir;
+	int bullet_count;
+
+	// Handle weapon cooldown (rensha)
+	if (gMC.rensha > 0)
+		gMC.rensha--;
+
+	// ALT-FIRE MODE CHECK (Jetpack / Flamethrower)
+	// Triggers if holding the Map key AND Flag 550 (0x226) is set
+	if ((gKey & gKeyMap) && GetNPCFlag(550))
+	{
+		// Check if we have Weapon EXP to burn
+		if (gArmsData[gSelectedArms].exp >= 0)
+		{
+			if (gMC.rensha < 1)
+			{
+				gMC.rensha = 2; // Rapid-fire tick
+				AddExpMyChar(-1); // Drain 1 EXP
+			}
+			alt_fire = true;
+		}
+	}
+
+	// NORMAL FIRE CHECK
+	if (!alt_fire)
+	{
+		if (!(gKeyTrg & gKeyShot) || gMC.rensha != 0)
+			goto RechargeLogic;
+
+		if (!UseArmsEnergy(1))
+		{
+			PlaySoundObject(37, SOUND_MODE_PLAY); // 0x25 Empty sound
+			if (gEmptyCaretTimer == 0)
+			{
+				SetCaret(gMC.x, gMC.y, CARET_EMPTY, DIR_LEFT);
+				gEmptyCaretTimer = 50; // 0x32
+			}
+			return;
+		}
+
+		// Set cooldown based on how many bullets are currently active
+		gMC.rensha = 16 - GetCurrentArmsMaxNum();
+		if (gMC.rensha < 1)
+			gMC.rensha = 1;
+	}
+
+	// Calculate Spawn Position and Direction
+	b_dir = gMC.direct;
+	if (gMC.up == 0 && gMC.down == 0) // Horizontal
+	{
+		b_y = gMC.y + 0x600;
+		b_x = (gMC.direct == 0) ? -0x1200 : 0x1200;
+	}
+	else // Vertical
+	{
+		b_x = gMC.x + ((gMC.direct == 0) ? -0x800 : 0x800);
+		
+		if (gMC.up == 0)
+		{
+			b_dir = 3; // Down
+			b_y = gMC.y + 0x1000;
+		}
+		else
+		{
+			b_dir = 1; // Up
+			b_y = gMC.y - 0x1000;
+		}
+	}
+
+	// Draw Caret for Normal Fire only
+	if (!alt_fire)
+	{
+		int caret_x = b_x;
+		if (gMC.up == 0 && gMC.down == 0)
+			caret_x = (b_x * 2) + gMC.x;
+			
+		SetCaret(caret_x, b_y, CARET_SHOOT, DIR_LEFT);
+	}
+
+	PlaySoundObject(62, SOUND_MODE_PLAY); // 0x3E Fire sound
+
+	// Calculate Number of Projectiles
+	if (alt_fire)
+	{
+		bullet_count = Random(1, 3) + (level / 4);
+	}
+	else
+	{
+		bullet_count = (level * 2) + 5;
+		
+		// Add 1 extra bullet for every specific collectible flag set (Flags 542 to 549)
+		for (int i = 8; i > 0; i--)
+		{
+			bullet_count += GetNPCFlag(i + 0x21D);
+		}
+	}
+
+	// Spawn the Bullets (Bullet ID 22 = Machine Gun Lv3 sprite, but acts custom)
+	for (int i = 0; i < bullet_count; i++)
+	{
+		int final_x = b_x;
+		if (gMC.up == 0 && gMC.down == 0)
+			final_x = b_x + gMC.x;
+
+		SetBullet(22, final_x, b_y, b_dir);
+	}
+
+	// Physics / Recoil Application
+	 new_xm = gMC.xm;
+	 new_ym = gMC.ym;
+
+	if (alt_fire)
+	{
+		// Alt-fire pushes you around smoothly (Jetpack behavior)
+		if (gMC.up == 0 && gMC.down == 0)
+		{
+			if (gKey & gKeyLeft || b_dir == 0) new_xm += 0x50;
+			if (gKey & gKeyRight || b_dir == 2) new_xm -= 0x50;
+		}
+		
+		if (gKey & gKeyUp) new_ym += 0x50;
+		
+		if (gKey & gKeyDown)
+		{
+			new_ym -= 0x50;
+			new_ym -= (new_ym >> 4); // Apply damping
+		}
+	}
+	else
+	{
+		// Normal fire has heavy instant recoil
+		if (gMC.up == 0 && gMC.down == 0)
+		{
+			new_xm += (b_dir == 0) ? 0xA0 : -0xA0;
+		}
+		else if (gMC.down)
+		{
+			if (gMC.ym > 0)
+				new_ym = (gMC.ym / 32) - 0x1A0;
+			
+			new_ym -= 0xC0;
+			new_xm = gMC.xm / 4; // Dampen horizontal movement to emphasize vertical boost
+		}
+		else
+		{
+			new_ym += 0xA0;
+		}
+	}
+
+	// Apply calculated recoil to Quote
+	gMC.xm = new_xm;
+	gMC.ym = new_ym;
+
+RechargeLogic:
+	// Auto-Recharge Weapon Energy while equipped
+	gShotgunChargeTimer++;
+
+	// Different animation states have different recharge speeds
+	if (gMC.ani_no == 10) // Looking away / Idle
+	{
+		if (gShotgunChargeTimer < 56) return;
+	}
+	else if (gMC.ani_no == 0 || gMC.ani_no == 5) // Standing / Walking
+	{
+		if (gShotgunChargeTimer < 16) return;
+	}
+	else // In air / Other
+	{
+		if (gShotgunChargeTimer < 33) return;
+	}
+
+	// Recharge 1 ammo unit and reset timer
+	gShotgunChargeTimer = 0;
+	ChargeArmsEnergy(1);
+}
 void ShootBullet(void)
 {
 	static int soft_rensha;
@@ -1101,7 +1296,7 @@ void ShootBullet(void)
 
 		case 10:
 			// Redirected to new custom Super Missile logic
-			//ShootBullet_SuperMissile(arm_level); // Address: 0x493A00
+			ShootBullet_Sparkler(arm_level); // Address: 0x493A00
 			break;
 
 		case 12:
