@@ -312,6 +312,99 @@ static void UpdateWaterCell(int x, int y)
     CELL(gFluidNext, x, y).life = settle + 2;
 }
 }
+
+
+// Disturb fluid around a point — clears settle counters so
+// nearby cells start flowing again, creating a wave effect
+void DisturbFluid(int sub_x, int sub_y, int sub_vx, int sub_vy, int radius_cells)
+{
+    if (!gFluidGrid) return;
+
+    int cx = SubToCell(sub_x);
+    int cy = SubToCell(sub_y);
+
+    int dx = (sub_vx > 0) ? 1 : (sub_vx < 0) ? -1 : 0;
+
+    // ── Step 1: Eject water upward in a column at the impact point ───────────
+    // Find all water cells in the column at cx and lift them up
+    // The higher the column the bigger the visible splash
+    int eject_height = radius_cells * 2;
+
+    for (int ry = 0; ry >= -eject_height; ry--)
+    {
+        int ny = cy + ry;
+        if (!IN_BOUNDS(cx, ny)) continue;
+        if (CELL(gFluidGrid, cx, ny).type != FLUID_WATER) continue;
+
+        // Find the highest empty cell above this water cell
+        for (int up = 1; up <= eject_height; up++)
+        {
+            int target_y = ny - up;
+            if (!IN_BOUNDS(cx, target_y)) break;
+            if (SolidAt(cx, target_y)) break;
+
+            if (CELL(gFluidGrid, cx, target_y).type == FLUID_EMPTY)
+            {
+                // Lift this water cell up — skipping cells creates
+                // a visible gap that gravity then collapses into a wave
+                CELL(gFluidGrid, cx, target_y) = CELL(gFluidGrid, cx, ny);
+                CELL(gFluidGrid, cx, target_y).life = 0;
+                CELL(gFluidGrid, cx, ny).type   = FLUID_EMPTY;
+                CELL(gFluidGrid, cx, ny).amount = 0;
+                CELL(gFluidGrid, cx, ny).life   = 0;
+                break;
+            }
+        }
+    }
+
+    // ── Step 2: Eject water sideways in both directions from impact ──────────
+    // Spread ejected cells outward — wider radius = bigger wave
+    for (int side = -1; side <= 1; side += 2)
+    {
+        for (int r = 1; r <= radius_cells; r++)
+        {
+            int nx = cx + side * r;
+            int ny = cy;
+
+            // Find water surface in this column
+            for (int scan = 0; scan <= radius_cells; scan++)
+            {
+                if (!IN_BOUNDS(nx, ny + scan)) break;
+                if (CELL(gFluidGrid, nx, ny + scan).type != FLUID_WATER) continue;
+
+                // Eject upward and outward — height decreases with distance
+                int height = (radius_cells - r) + 1;
+                int target_y = ny + scan - height;
+
+                if (!IN_BOUNDS(nx, target_y)) break;
+                if (SolidAt(nx, target_y)) break;
+
+                if (CELL(gFluidGrid, nx, target_y).type == FLUID_EMPTY)
+                {
+                    CELL(gFluidGrid, nx, target_y) = CELL(gFluidGrid, nx, ny + scan);
+                    CELL(gFluidGrid, nx, target_y).life = 0;
+                    CELL(gFluidGrid, nx, ny + scan).type   = FLUID_EMPTY;
+                    CELL(gFluidGrid, nx, ny + scan).amount = 0;
+                    CELL(gFluidGrid, nx, ny + scan).life   = 0;
+                }
+                break;
+            }
+        }
+    }
+
+    // ── Step 3: Wake entire radius so cells flow to fill the gaps ───────────
+    for (int ry = -radius_cells - 2; ry <= radius_cells + 2; ry++)
+    {
+        for (int rx = -radius_cells - 2; rx <= radius_cells + 2; rx++)
+        {
+            int nx = cx + rx;
+            int ny = cy + ry;
+            if (!IN_BOUNDS(nx, ny)) continue;
+            if (CELL(gFluidGrid, nx, ny).type == FLUID_WATER)
+                CELL(gFluidGrid, nx, ny).life = 0;
+        }
+    }
+}
 static void UpdateLavaCell(int x, int y)
 {
 	// Lava behaves like water but slower (only spreads 1 cell per frame)

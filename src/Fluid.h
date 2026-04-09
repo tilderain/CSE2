@@ -63,3 +63,5 @@ void RebuildFluidSolidMaskRegion(int tx, int ty, int radius_tiles);
 void FluidContributeToLight(float *light_r, float *light_g, float *light_b,
                              int light_w, int light_h);
 #endif
+
+void DisturbFluid(int sub_x, int sub_y, int sub_vx, int sub_vy, int radius_cells);

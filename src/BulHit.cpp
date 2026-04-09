@@ -492,7 +492,7 @@ int FUN_00494770(int tx, int ty, BULLET *bul)
     return hit;
 }
 
-
+#include "Fluid.h"
 void HitBulletMap(void)
 {
 	int i;
@@ -596,6 +596,12 @@ void HitBulletMap(void)
 
 hit_block_2:
 			gBul[i].flag |= JudgeHitBulletBlock2(x, y, atrb, &gBul[i]);
+			
+			if (IsFluidAt(gBul[i].x, gBul[i].y))
+    		{
+    		    // Bullet passing through water — small continuous disturbance
+    		    DisturbFluid(gBul[i].x, gBul[i].y, gBul[i].xm, gBul[i].ym, 4);
+    		}
 		}
 	}
 }

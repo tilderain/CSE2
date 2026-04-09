@@ -963,12 +963,14 @@ void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBacken
 	static unsigned char last_red;
 	static unsigned char last_green;
 	static unsigned char last_blue;
+	static unsigned char last_alpha; // Added for state tracking
 
 	if (surface == NULL)
 		return;
 
-	// Flush vertex data if a context-change is needed
-	if (last_render_mode != MODE_COLOUR_FILL || last_destination_texture != surface->texture_id || last_red != red || last_green != green || last_blue != blue)
+	// Flush vertex data if a context-change is needed (now includes alpha check)
+	if (last_render_mode != MODE_COLOUR_FILL || last_destination_texture != surface->texture_id || 
+		last_red != red || last_green != green || last_blue != blue || last_alpha != alpha)
 	{
 		FlushVertexBuffer();
 
@@ -978,6 +980,7 @@ void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBacken
 		last_red = red;
 		last_green = green;
 		last_blue = blue;
+		last_alpha = alpha;
 
 		// Point our framebuffer to the destination texture
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surface->texture_id, 0);
@@ -985,15 +988,27 @@ void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBacken
 
 		glUseProgram(program_colour_fill);
 
-		glDisable(GL_BLEND);
+		// FIX: Support alpha blending
+		if (alpha < 255)
+			glEnable(GL_BLEND);
+		else
+			glDisable(GL_BLEND);
 
 		// Disable texture coordinate array, since this doesn't use textures
 		glDisableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
 
-		glUniform4f(program_colour_fill_uniform_colour, red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f);
+		// FIX: Use pre-multiplied alpha logic for the uniform.
+		// The engine uses glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA), 
+		// so we multiply RGB by Alpha here.
+		float fAlpha = alpha / 255.0f;
+		glUniform4f(program_colour_fill_uniform_colour, 
+			(red / 255.0f) * fAlpha, 
+			(green / 255.0f) * fAlpha, 
+			(blue / 255.0f) * fAlpha, 
+			fAlpha);
 	}
 
-	// Add data to the vertex queue
+	// Add data to the vertex queue (Logic below remains the same)
 	const GLfloat vertex_left = (rect->left * (2.0f / surface->width)) - 1.0f;
 	const GLfloat vertex_right = (rect->right * (2.0f / surface->width)) - 1.0f;
 	const GLfloat vertex_top = (rect->top * (2.0f / surface->height)) - 1.0f;

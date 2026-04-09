@@ -555,8 +555,23 @@ void HitMyCharMap(void)
 
 	if (IsFluidAt(gMC.x, gMC.y))
 	{
-    	gMC.flag |= 0x100;          // underwater physics flag
+	    // Only disturb when moving fast enough to be visible
+	    if (abs(gMC.xm) > 0x100 || abs(gMC.ym) > 0x100)
+	        DisturbFluid(gMC.x, gMC.y, gMC.xm, gMC.ym, 3);
+		gMC.flag |= 0x100;          // underwater physics flag
 	}
+
+
+	// Surface entry splash — when player first hits water surface
+	// track previous fluid state to detect entry
+	static bool was_in_fluid = false;
+	bool in_fluid = IsFluidAt(gMC.x, gMC.y);
+	if (in_fluid && !was_in_fluid)
+	{
+	    // Just entered water — big splash
+	    DisturbFluid(gMC.x, gMC.y, gMC.xm, gMC.ym, 6);
+	}
+	was_in_fluid = in_fluid;
 
 	if (GetFluidTypeAt(gMC.x, gMC.y) == FLUID_LAVA)
 	{
