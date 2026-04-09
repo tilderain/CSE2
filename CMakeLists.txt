@@ -89,6 +89,8 @@ add_executable(CSE2 WIN32
 	"src/Flags.h"
 	"src/Flash.cpp"
 	"src/Flash.h"
+	"src/Fluid.cpp"
+	"src/Fluid.h"
 	"src/Font.cpp"
 	"src/Font.h"
 	"src/Frame.cpp"

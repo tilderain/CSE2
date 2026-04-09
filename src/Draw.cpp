@@ -810,3 +810,40 @@ void EndTextObject(void)
 {
 	UnloadFont(font);
 }
+
+
+void CortBoxAlpha(const RECT *rect, unsigned long col, unsigned char alpha)
+{
+	static RenderBackend_Rect rcSet;
+	rcSet.left   = rect->left;
+	rcSet.top    = rect->top;
+	rcSet.right  = rect->right;
+	rcSet.bottom = rect->bottom;
+
+	const unsigned char red   =  col        & 0xFF;
+	const unsigned char green = (col >>  8) & 0xFF;
+	const unsigned char blue  = (col >> 16) & 0xFF;
+
+	if (rcSet.right <= rcSet.left || rcSet.bottom <= rcSet.top)
+		return;
+
+	RenderBackend_ColourFill(framebuffer, &rcSet, red, green, blue, alpha);
+}
+
+void CortBoxAlpha_Subpixel(const RECT *rect, unsigned long col, unsigned char alpha)
+{
+    static RenderBackend_Rect rcSet;
+    rcSet.left   = SubpixelToScreenCoord(rect->left);
+    rcSet.top    = SubpixelToScreenCoord(rect->top);
+    rcSet.right  = SubpixelToScreenCoord(rect->right);
+    rcSet.bottom = SubpixelToScreenCoord(rect->bottom);
+
+    const unsigned char red   =  col        & 0xFF;
+    const unsigned char green = (col >>  8) & 0xFF;
+    const unsigned char blue  = (col >> 16) & 0xFF;
+
+    if (rcSet.right <= rcSet.left || rcSet.bottom <= rcSet.top)
+        return;
+
+    RenderBackend_ColourFill(framebuffer, &rcSet, red, green, blue, alpha);
+}

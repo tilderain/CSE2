@@ -10,4 +10,4 @@ cmake -B build    -DCMAKE_TOOLCHAIN_FILE=MinGW-toolchain.cmake \
     -DBACKEND_RENDERER=SDLTexture \
     -DBACKEND_AUDIO=SDL2 \
     -DBACKEND_PLATFORM=SDL2 \
-    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_BUILD_TYPE=Debug

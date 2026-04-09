@@ -387,21 +387,22 @@ void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBacken
 	SDL_Rect sdl_rect;
 	RectToSDLRect(rect, &sdl_rect);
 
-	if (SDL_SetRenderDrawColor(renderer, (red * alpha) / 0xFF, (green * alpha) / 0xFF, (blue * alpha) / 0xFF, alpha) < 0)
+	// Pass raw color — premultiplied_blend_mode handles the alpha multiply
+	// in the blend equation. Don't pre-multiply here or it doubles up.
+	if (SDL_SetRenderDrawColor(renderer, red, green, blue, alpha) < 0)
 		Backend_PrintError("Couldn't set color for drawing operations: %s", SDL_GetError());
 
-	// Draw colour
 	if (SDL_SetRenderTarget(renderer, surface->texture) < 0)
 		Backend_PrintError("Couldn't set texture current rendering target: %s", SDL_GetError());
 
-	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE) < 0)
-		Backend_PrintError("Couldn't disable blending for drawing operations: %s", SDL_GetError());
+	if (SDL_SetRenderDrawBlendMode(renderer, alpha < 0xFF ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE) < 0)
+		Backend_PrintError("Couldn't set blending for drawing operations: %s", SDL_GetError());
 
 	if (SDL_RenderFillRect(renderer, &sdl_rect) < 0)
 		Backend_PrintError("Couldn't fill rectangle on current rendering target: %s", SDL_GetError());
 
 	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND) < 0)
-		Backend_PrintError("Couldn't enable alpha blending for drawing operations: %s", SDL_GetError());
+		Backend_PrintError("Couldn't restore blending for drawing operations: %s", SDL_GetError());
 }
 
 RenderBackend_Glyph* RenderBackend_LoadGlyph(const unsigned char *pixels, unsigned int width, unsigned int height, int pitch)

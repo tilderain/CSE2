@@ -44,12 +44,12 @@ BEGIN
         BLOCK "041104b0"
         BEGIN
             VALUE "FileDescription", "Doukutsu"
-            VALUE "FileVersion", "1, 0, 0, 6"
+            VALUE "FileVersion", "0, 5, 0, 6"
             VALUE "InternalName", "Doukutsu Monogatari"
             VALUE "LegalCopyright", "I can't get MSVC2003 to understand Japanese so here's a placeholder"
             VALUE "OriginalFilename", "Doukutsu.exe"
             VALUE "ProductName", "I can't get MSVC2003 to understand Japanese so here's a placeholder"
-            VALUE "ProductVersion", "1, 0, 0, 6"
+            VALUE "ProductVersion", "0, 5, 0, 6"
         END
     END
     BLOCK "VarFileInfo"

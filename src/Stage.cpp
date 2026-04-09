@@ -224,7 +224,7 @@ BOOL LoadStageTable(void)
 	printf("Failed to load stage.tbl/mrmap.bin\n");
 	return FALSE;
 }
-
+#include "Fluid.h"
 BOOL TransferStage(int no, int w, int x, int y)
 {
 	std::string path;
@@ -252,6 +252,9 @@ BOOL TransferStage(int no, int w, int x, int y)
 	path = path_dir + '/' + gTMT[no].map + ".pxm";
 	if (!LoadMapData2(path.c_str()))
 		bError = TRUE;
+
+
+	ResetFluidSystem(gMap.width, gMap.length);
 
 	// Load NPCs
 	path = path_dir + '/' + gTMT[no].map + ".pxe";

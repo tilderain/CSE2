@@ -745,6 +745,8 @@ void HitNpCharNpChar()
 	}
 }
 
+#include "Fluid.h"
+
 static int ModeAction(void)
 {
 	int frame_x;
@@ -833,6 +835,7 @@ static int ModeAction(void)
 			ActNpChar();
 			ActBossChar();
 			ActValueView();
+			UpdateFluid();
 			ActBack();
 			ResetMyCharFlag();
 			HitMyCharMap();
@@ -881,6 +884,7 @@ static int ModeAction(void)
 		PutStar(frame_x, frame_y);
 		PutMapDataVector(frame_x, frame_y);
 		PutStage_Front(frame_x, frame_y);
+		DrawFluid(frame_x, frame_y);
 		PutFront(frame_x, frame_y);
 		PutBlackBars(frame_x, frame_y);
 		PutFlash();

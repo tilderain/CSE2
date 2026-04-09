@@ -406,7 +406,7 @@ int JudgeHitMyCharVectDown(int x, int y)
 
 	return hit;
 }
-
+#include "Fluid.h"
 void HitMyCharMap(void)
 {
     // Floor division matching ASM arithmetic shift
@@ -552,6 +552,18 @@ void HitMyCharMap(void)
 
     if (gMC.y > gWaterY + 0x800)
         gMC.flag |= 0x100;
+
+	if (IsFluidAt(gMC.x, gMC.y))
+	{
+    	gMC.flag |= 0x100;          // underwater physics flag
+	}
+
+	if (GetFluidTypeAt(gMC.x, gMC.y) == FLUID_LAVA)
+	{
+    // Deal damage — use whatever your damage function is
+    	DamageMyChar(10);
+
+	}
 }
 int JudgeHitMyCharNPC(NPCHAR *npc)
 {

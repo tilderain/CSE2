@@ -12,6 +12,7 @@
 
 static int empty;
 
+#include "Fluid.h"
 void ShootBullet_Frontia1(int level)
 {
 	int bul_no;
@@ -83,8 +84,12 @@ void ShootBullet_Frontia1(int level)
 			}
 
 			PlaySoundObject(33, SOUND_MODE_PLAY);
+			AddFluid(gMC.x, gMC.y, FLUID_WATER, 8);
 		}
+		
 	}
+
+
 }
 
 void ShootBullet_PoleStar(int level)
@@ -371,6 +376,7 @@ int GetSelectedWeaponAmmo()
 
 int gEmptySoundTimer = 0;
 #include "Game.h"
+#include "Fluid.h"
 void ShootBullet_Missile(int level, bool bSuper)
 {
 	int bul_no;

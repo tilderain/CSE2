@@ -69,3 +69,6 @@ void InitTextObject(const char *font_name);
 void PutText(int x, int y, const char *text, unsigned long color);
 void PutText2(int x, int y, const char *text, unsigned long color, SurfaceID surf_no);
 void EndTextObject(void);
+
+void CortBoxAlpha(const RECT *rect, unsigned long col, unsigned char alpha);
+void CortBoxAlpha_Subpixel(const RECT *rect, unsigned long col, unsigned char alpha);
