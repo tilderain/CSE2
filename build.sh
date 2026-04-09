@@ -1,0 +1,13 @@
+cmake -B build    -DCMAKE_TOOLCHAIN_FILE=MinGW-toolchain.cmake \
+    -DFORCE_LOCAL_LIBS=ON \
+    -DPKG_CONFIG_STATIC_LIBS=ON \
+    -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=TRUE \
+    -DCMAKE_DISABLE_FIND_PACKAGE_Freetype=TRUE \
+    -DDIRECTX=OFF \
+    -DRENDER_D3D=OFF \
+    -DDIRECTSOUND=OFF \
+    -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition" \
+    -DBACKEND_RENDERER=SDLTexture \
+    -DBACKEND_AUDIO=SDL2 \
+    -DBACKEND_PLATFORM=SDL2 \
+    -DCMAKE_BUILD_TYPE=Release

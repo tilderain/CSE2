@@ -99,3 +99,6 @@ error.log
 /CMakeFiles
 /bin2h-prefix
 /DoConfig
+
+allcpp.txt
+allh.txt
