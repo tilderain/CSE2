@@ -9,6 +9,8 @@ extern BOOL gb60fps;
 extern BOOL gbSmoothScrolling;
 extern BOOL gbVsync;
 
+extern int mag;
+
 typedef enum SurfaceID
 {
 	SURFACE_ID_TITLE = 0,
@@ -55,8 +57,8 @@ BOOL ReloadBitmap_Resource(const char *name, SurfaceID surf_no);
 BOOL ReloadBitmap_File(const char *name, SurfaceID surf_no);
 BOOL MakeSurface_Generic(int bxsize, int bysize, SurfaceID surf_no, BOOL bSystem);
 void BackupSurface(SurfaceID surf_no, const RECT *rect);
-void PutBitmap3(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no);
-void PutBitmap4(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no);
+void PutBitmap3(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no, bool fullbright = false);
+void PutBitmap4(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no, bool fullbright = false);
 void Surface2Surface(int x, int y, const RECT *rect, int to, int from);
 unsigned long GetCortBoxColor(unsigned long col);
 void CortBox(const RECT *rect, unsigned long col);
@@ -72,3 +74,5 @@ void EndTextObject(void);
 
 void CortBoxAlpha(const RECT *rect, unsigned long col, unsigned char alpha);
 void CortBoxAlpha_Subpixel(const RECT *rect, unsigned long col, unsigned char alpha);
+
+void DrawLight(int sub_x, int sub_y, int fx, int fy, float radius, unsigned char r, unsigned char g, unsigned char b, unsigned char intensity);

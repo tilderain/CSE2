@@ -550,6 +550,10 @@ void PutBullet(int fx, int fy)
 	{
 		if (gBul[i].cond & 0x80)
 		{
+			if (gBul[i].code_bullet == 7) // 7 is the Fireball
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 40.0f, 255, 100, 0, 255);
+            }
 			switch (gBul[i].direct)
 			{
 				case 0:
@@ -1103,6 +1107,7 @@ void ActBullet_PoleStar(BULLET *bul, int level)
 #include "Flags.h"
 #include "ArmsItem.h"
 
+#include "Frame.h"
 
 void ActBullet_FireBall(BULLET *bul, int level)
 {
@@ -1295,6 +1300,7 @@ void ActBullet_FireBall(BULLET *bul, int level)
 		bul->rect.top += 0x60;
 		bul->rect.bottom += 0x60;
 	}
+
 }
 
 #include "Frame.h"

@@ -111,7 +111,7 @@ void PutNumber4(int x, int y, int value, BOOL bZero)
 
 		// Draw digit
 		if ((bZero && offset == 2) || sw != 0 || offset == 3)
-			PutBitmap3(&rcClient, PixelToScreenCoord(x + 8 * offset), PixelToScreenCoord(y), &rect[a], SURFACE_ID_TEXT_BOX);
+			PutBitmap3(&rcClient, PixelToScreenCoord(x + 8 * offset), PixelToScreenCoord(y), &rect[a], SURFACE_ID_TEXT_BOX, true);
 
 		// Go to next digit
 		++offset;
@@ -798,7 +798,6 @@ static int ModeAction(void)
 	{
 		// Get pressed keys
 		GetTrg();
-        RenderBackend_ClearLightmap(255, 255, 255); 
 
 		if (gKey & KEY_PAUSE)
 		{
@@ -874,6 +873,8 @@ static int ModeAction(void)
 
 		ProcFade();
 		CortBox(&grcFull, color);
+		RenderBackend_ClearLightmap(80, 80, 100); 
+
 		GetFramePosition(&frame_x, &frame_y);
 		PutBack(frame_x, frame_y);
 		DoFireSpread(frame_x, frame_y);

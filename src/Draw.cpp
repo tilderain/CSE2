@@ -30,7 +30,7 @@ typedef enum SurfaceType
 RECT grcGame = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
 RECT grcFull = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT};
 
-static int mag;
+int mag;
 static BOOL fullscreen;	// TODO - Not the original variable name
 
 BOOL gb60fps;
@@ -528,7 +528,7 @@ static void ScaleRect(const RECT *rect, RenderBackend_Rect *scaled_rect)
 	scaled_rect->bottom = rect->bottom * mag;
 }
 
-void PutBitmap3(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no) // Transparency
+void PutBitmap3(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no, bool fullbright) // Transparency
 {
 	static RenderBackend_Rect rcWork;
 	ScaleRect(rect, &rcWork);
@@ -558,10 +558,10 @@ void PutBitmap3(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID su
 	if (rcWork.right <= rcWork.left || rcWork.bottom <= rcWork.top)
 		return;
 
-	RenderBackend_Blit(surf[surf_no], &rcWork, framebuffer, x, y, TRUE);
+	RenderBackend_Blit(surf[surf_no], &rcWork, framebuffer, x, y, TRUE, fullbright);
 }
 
-void PutBitmap4(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no) // No Transparency
+void PutBitmap4(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID surf_no, bool fullbright) // No Transparency
 {
 	static RenderBackend_Rect rcWork;
 	ScaleRect(rect, &rcWork);
@@ -591,7 +591,7 @@ void PutBitmap4(const RECT *rcView, int x, int y, const RECT *rect, SurfaceID su
 	if (rcWork.right <= rcWork.left || rcWork.bottom <= rcWork.top)
 		return;
 
-	RenderBackend_Blit(surf[surf_no], &rcWork, framebuffer, x, y, FALSE);
+	RenderBackend_Blit(surf[surf_no], &rcWork, framebuffer, x, y, FALSE, fullbright);
 }
 
 void Surface2Surface(int x, int y, const RECT *rect, int to, int from)
@@ -846,4 +846,22 @@ void CortBoxAlpha_Subpixel(const RECT *rect, unsigned long col, unsigned char al
         return;
 
     RenderBackend_ColourFill(framebuffer, &rcSet, red, green, blue, alpha);
+}
+
+void DrawLight(int sub_x, int sub_y, int fx, int fy, float radius, unsigned char r, unsigned char g, unsigned char b, unsigned char intensity)
+{
+    // Use the engine's built-in subpixel math to get the screen position
+    // This handles magnification (mag) and smooth scrolling automatically
+    int x = SubpixelToScreenCoord(sub_x) - SubpixelToScreenCoord(fx);
+    int y = SubpixelToScreenCoord(sub_y) - SubpixelToScreenCoord(fy);
+
+    // Scale the radius by magnification so it stays the same relative size
+    extern int mag;
+    RenderBackend_DrawLight(x, y, radius * (float)mag, r, g, b, intensity);
+}
+
+void DrawUnlitRegion(int x, int y, int w, int h)
+{
+	extern int mag;
+	RenderBackend_DrawUnlitRect(x * mag, y * mag, w * mag, h * mag);
 }

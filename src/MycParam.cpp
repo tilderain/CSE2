@@ -299,16 +299,16 @@ void PutArmsEnergy(BOOL flash)
 	}
 	else
 	{
-		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 48), PixelToScreenCoord(16), &rcNone, SURFACE_ID_TEXT_BOX);
-		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 48), PixelToScreenCoord(24), &rcNone, SURFACE_ID_TEXT_BOX);
+		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 48), PixelToScreenCoord(16), &rcNone, SURFACE_ID_TEXT_BOX, true);
+		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 48), PixelToScreenCoord(24), &rcNone, SURFACE_ID_TEXT_BOX, true);
 	}
 
 	// Draw experience and ammo
 	if (flash == TRUE && (gMC.shock / 2) % 2)
 		return;
 
-	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 32), PixelToScreenCoord(24), &rcPer, SURFACE_ID_TEXT_BOX);
-	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX), PixelToScreenCoord(32), &rcLv, SURFACE_ID_TEXT_BOX);
+	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 32), PixelToScreenCoord(24), &rcPer, SURFACE_ID_TEXT_BOX, true);
+	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX), PixelToScreenCoord(32), &rcLv, SURFACE_ID_TEXT_BOX, true);
 	PutNumber4(gArmsEnergyX - 8, 32, gArmsData[gSelectedArms].level, FALSE);
 
 	RECT rcExpBox = {0, 72, 40, 80};
@@ -330,11 +330,11 @@ void PutArmsEnergy(BOOL flash)
 	int exp_now = gArmsData[gSelectedArms].exp;
 	int exp_next = gArmsLevelTable[arms_code].exp[lv];
 
-	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpBox, SURFACE_ID_TEXT_BOX);
+	PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpBox, SURFACE_ID_TEXT_BOX, true);
 
 	if (lv == 2 && gArmsData[gSelectedArms].exp == gArmsLevelTable[arms_code].exp[lv])
 	{
-		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpMax, SURFACE_ID_TEXT_BOX);
+		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpMax, SURFACE_ID_TEXT_BOX, true);
 	}
 	else
 	{
@@ -343,11 +343,11 @@ void PutArmsEnergy(BOOL flash)
 		else
 			rcExpVal.right = 0;
 
-		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpVal, SURFACE_ID_TEXT_BOX);
+		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpVal, SURFACE_ID_TEXT_BOX, true);
 	}
 
 	if (gMC.exp_wait && ((add_flash++ / 2) % 2))
-		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpFlash, SURFACE_ID_TEXT_BOX);
+		PutBitmap3(&rcView, PixelToScreenCoord(gArmsEnergyX + 24), PixelToScreenCoord(32), &rcExpFlash, SURFACE_ID_TEXT_BOX, true);
 }
 
 void PutActiveArmsList(void)
@@ -381,7 +381,7 @@ void PutActiveArmsList(void)
 		// Draw icon
 		rect.left = gArmsData[a].code * 16;
 		rect.right = rect.left + 16;
-		PutBitmap3(&grcGame, PixelToScreenCoord(x), PixelToScreenCoord(16), &rect, SURFACE_ID_ARMS_IMAGE);
+		PutBitmap3(&grcGame, PixelToScreenCoord(x), PixelToScreenCoord(16), &rect, SURFACE_ID_ARMS_IMAGE, true);
 	}
 }
 
@@ -412,9 +412,9 @@ void PutMyLife(BOOL flash)
 	rcLife.right = ((gMC.life * 40) / gMC.max_life) - 1;
 	rcBr.right = ((gMC.lifeBr * 40) / gMC.max_life) - 1;
 
-	PutBitmap3(&grcGame, PixelToScreenCoord(16), PixelToScreenCoord(40), &rcCase, SURFACE_ID_TEXT_BOX);
-	PutBitmap3(&grcGame, PixelToScreenCoord(40), PixelToScreenCoord(40), &rcBr, SURFACE_ID_TEXT_BOX);
-	PutBitmap3(&grcGame, PixelToScreenCoord(40), PixelToScreenCoord(40), &rcLife, SURFACE_ID_TEXT_BOX);
+	PutBitmap3(&grcGame, PixelToScreenCoord(16), PixelToScreenCoord(40), &rcCase, SURFACE_ID_TEXT_BOX, true);
+	PutBitmap3(&grcGame, PixelToScreenCoord(40), PixelToScreenCoord(40), &rcBr, SURFACE_ID_TEXT_BOX, true);
+	PutBitmap3(&grcGame, PixelToScreenCoord(40), PixelToScreenCoord(40), &rcLife, SURFACE_ID_TEXT_BOX, true);
 	PutNumber4(8, 40, gMC.lifeBr, FALSE);
 }
 

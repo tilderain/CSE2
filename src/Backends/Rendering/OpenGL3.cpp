@@ -446,6 +446,9 @@ static void GlyphBatch_Draw(spritebatch_sprite_t *sprites, int count, int textur
 		last_blue = glyph_colour_channels[2];
 
 		glUseProgram(program_glyph);
+
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
 		glUniform4f(program_glyph_uniform_colour, glyph_colour_channels[0] / 255.0f, glyph_colour_channels[1] / 255.0f, glyph_colour_channels[2] / 255.0f, 1.0f);
 
 		// Point our framebuffer to the destination texture
@@ -830,14 +833,23 @@ void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, un
 
 void RenderBackend_ClearLightmap(unsigned char ambient_r, unsigned char ambient_g, unsigned char ambient_b)
 {
-	FlushVertexBuffer();
-	last_render_mode = MODE_BLANK;
-	
-	glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
-	glClearColor(ambient_r / 255.0f, ambient_g / 255.0f, ambient_b / 255.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-	
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+    // 1. Flush any pending vertex data before switching FBOs
+    FlushVertexBuffer();
+    last_render_mode = MODE_BLANK;
+    
+    // 2. Bind the Lightmap FBO
+    glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+    
+    // 3. Clear it to the "Ambient" darkness color
+    glClearColor(ambient_r / 255.0f, ambient_g / 255.0f, ambient_b / 255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // 4. Reset ClearColor to Black so the main screen clear doesn't use the ambient color
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    // 5. IMPORTANT: Switch back to the main game framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+    glViewport(0, 0, framebuffer.width, framebuffer.height);
 }
 
 void RenderBackend_Deinit(void)
@@ -1073,13 +1085,52 @@ void RenderBackend_UnlockSurface(RenderBackend_Surface *surface, unsigned int wi
 // Drawing //
 /////////////
 
-void RenderBackend_Blit(RenderBackend_Surface *source_surface, const RenderBackend_Rect *rect, RenderBackend_Surface *destination_surface, long x, long y, bool alpha_blend)
+// Private helper inside OpenGL3.cpp to punch holes automatically
+static void PunchLightmapHole(long x, long y, long w, long h)
+{
+	FlushVertexBuffer();
+	glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+	glViewport(0, 0, framebuffer.width, framebuffer.height);
+
+	glUseProgram(program_colour_fill);
+	glDisable(GL_BLEND);
+	glDisableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
+	glUniform4f(program_colour_fill_uniform_colour, 1.0f, 1.0f, 1.0f, 1.0f);
+
+	// MAP SCREEN COORDINATES TO BOTTOM-UP FBO COORDINATES
+	const GLfloat x1 = ((float)x / (float)framebuffer.width) * 2.0f - 1.0f;
+	const GLfloat x2 = ((float)(x + w) / (float)framebuffer.width) * 2.0f - 1.0f;
+	const GLfloat y1 = ((float)y / (float)framebuffer.height) * 2.0f - 1.0f;
+	const GLfloat y2 = ((float)(y + h) / (float)framebuffer.height) * 2.0f - 1.0f;
+
+	VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+	if (vbs != NULL)
+	{
+		vbs->vertices[0][0].position.x = x1; vbs->vertices[0][0].position.y = y1;
+		vbs->vertices[0][1].position.x = x2; vbs->vertices[0][1].position.y = y1;
+		vbs->vertices[0][2].position.x = x2; vbs->vertices[0][2].position.y = y2;
+
+		vbs->vertices[1][0].position.x = x1; vbs->vertices[1][0].position.y = y1;
+		vbs->vertices[1][1].position.x = x2; vbs->vertices[1][1].position.y = y2;
+		vbs->vertices[1][2].position.x = x1; vbs->vertices[1][2].position.y = y2;
+	}
+	
+	FlushVertexBuffer();
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+	last_render_mode = MODE_BLANK; 
+}
+
+
+void RenderBackend_Blit(RenderBackend_Surface *source_surface, const RenderBackend_Rect *rect, RenderBackend_Surface *destination_surface, long x, long y, bool alpha_blend, bool fullbright)
 {
 	if (source_surface == NULL || destination_surface == NULL)
 		return;
 
-	const RenderMode render_mode = (alpha_blend ? MODE_DRAW_SURFACE_WITH_TRANSPARENCY : MODE_DRAW_SURFACE);
+	// IF FULLBRIGHT: Punch a hole in the lightmap first
+	if (fullbright)
+		PunchLightmapHole(x, y, rect->right - rect->left, rect->bottom - rect->top);
 
+	const RenderMode render_mode = (alpha_blend ? MODE_DRAW_SURFACE_WITH_TRANSPARENCY : MODE_DRAW_SURFACE);
 	// Flush vertex data if a context-change is needed
 	if (last_render_mode != render_mode || last_source_texture != source_surface->texture_id || last_destination_texture != destination_surface->texture_id)
 	{
@@ -1089,11 +1140,15 @@ void RenderBackend_Blit(RenderBackend_Surface *source_surface, const RenderBacke
 		last_source_texture = source_surface->texture_id;
 		last_destination_texture = destination_surface->texture_id;
 
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id); 
 		// Point our framebuffer to the destination texture
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, destination_surface->texture_id, 0);
 		glViewport(0, 0, destination_surface->width, destination_surface->height);
 
 		glUseProgram(program_texture);
+
+        // Resets the blend mode to the engine's default (Pre-multiplied Alpha)
+	    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); 
 
 		if (alpha_blend)
 			glEnable(GL_BLEND);
@@ -1180,6 +1235,9 @@ void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBacken
 		glViewport(0, 0, surface->width, surface->height);
 
 		glUseProgram(program_colour_fill);
+
+
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
 		// FIX: Support alpha blending
 		if (alpha < 255)
@@ -1302,4 +1360,48 @@ void RenderBackend_HandleWindowResize(unsigned int width, unsigned int height)
 {
 	actual_screen_width = width;
 	actual_screen_height = height;
+}
+
+
+void RenderBackend_DrawUnlitRect(long x, long y, long w, long h)
+{
+	// Flush any previous sprite data
+	FlushVertexBuffer();
+
+	last_render_mode = MODE_BLANK;
+
+	// Bind the Lightmap
+	glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+	glViewport(0, 0, framebuffer.width, framebuffer.height);
+
+	// Use the Colour Fill shader to draw pure white
+	glUseProgram(program_colour_fill);
+	glDisable(GL_BLEND); // No blending needed, we want to force white
+	glDisableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
+
+	// Set uniform to Pure White (1.0, 1.0, 1.0, 1.0)
+	glUniform4f(program_colour_fill_uniform_colour, 1.0f, 1.0f, 1.0f, 1.0f);
+
+	// Calculate OpenGL coordinates (-1.0 to 1.0)
+	const GLfloat vertex_left   = (x * (2.0f / framebuffer.width)) - 1.0f;
+	const GLfloat vertex_right  = ((x + w) * (2.0f / framebuffer.width)) - 1.0f;
+	const GLfloat vertex_top    = 1.0f - (y * (2.0f / framebuffer.height));
+	const GLfloat vertex_bottom = 1.0f - ((y + h) * (2.0f / framebuffer.height));
+
+	VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+	if (vbs != NULL)
+	{
+		vbs->vertices[0][0].position.x = vertex_left;  vbs->vertices[0][0].position.y = vertex_top;
+		vbs->vertices[0][1].position.x = vertex_right; vbs->vertices[0][1].position.y = vertex_top;
+		vbs->vertices[0][2].position.x = vertex_right; vbs->vertices[0][2].position.y = vertex_bottom;
+
+		vbs->vertices[1][0].position.x = vertex_left;  vbs->vertices[1][0].position.y = vertex_top;
+		vbs->vertices[1][1].position.x = vertex_right; vbs->vertices[1][1].position.y = vertex_bottom;
+		vbs->vertices[1][2].position.x = vertex_left;  vbs->vertices[1][2].position.y = vertex_bottom;
+	}
+    
+	FlushVertexBuffer();
+
+	// Switch back to main framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 }
