@@ -833,25 +833,19 @@ void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, un
 
 void RenderBackend_ClearLightmap(unsigned char ambient_r, unsigned char ambient_g, unsigned char ambient_b)
 {
-    // 1. Flush any pending vertex data before switching FBOs
-    FlushVertexBuffer();
-    last_render_mode = MODE_BLANK;
-    
-    // 2. Bind the Lightmap FBO
-    glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
-    
-    // 3. Clear it to the "Ambient" darkness color
-    glClearColor(ambient_r / 255.0f, ambient_g / 255.0f, ambient_b / 255.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    
-    // 4. Reset ClearColor to Black so the main screen clear doesn't use the ambient color
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-    // 5. IMPORTANT: Switch back to the main game framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
-    glViewport(0, 0, framebuffer.width, framebuffer.height);
+	FlushVertexBuffer();
+	last_render_mode = MODE_BLANK;
+	
+	glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+	
+	// We divide the input by 2.0 (effectively) because the shader 
+	// will multiply it back by 2.0 later.
+	glClearColor(ambient_r / 510.0f, ambient_g / 510.0f, ambient_b / 510.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 }
-
 void RenderBackend_Deinit(void)
 {
 	free(local_vertex_buffer);
@@ -1095,7 +1089,7 @@ static void PunchLightmapHole(long x, long y, long w, long h)
 	glUseProgram(program_colour_fill);
 	glDisable(GL_BLEND);
 	glDisableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
-	glUniform4f(program_colour_fill_uniform_colour, 1.0f, 1.0f, 1.0f, 1.0f);
+	glUniform4f(program_colour_fill_uniform_colour, 0.5f, 0.5f, 0.5f, 1.0f);
 
 	// MAP SCREEN COORDINATES TO BOTTOM-UP FBO COORDINATES
 	const GLfloat x1 = ((float)x / (float)framebuffer.width) * 2.0f - 1.0f;

@@ -552,7 +552,7 @@ void PutBullet(int fx, int fy)
 		{
 			if (gBul[i].code_bullet == 7) // 7 is the Fireball
             {
-                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 40.0f, 255, 100, 0, 255);
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 40.0f, 255, 100, 0, 128);
             }
 			switch (gBul[i].direct)
 			{
