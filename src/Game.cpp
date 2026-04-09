@@ -647,6 +647,104 @@ void DoFireSpread(int param_1, int param_2)
 }
 
 
+void HitNpCharNpChar()
+{
+		int i, j;
+	NPCHAR *platform;
+	NPCHAR *passenger;
+
+	for (i = 0; i < NPC_MAX; ++i)
+	{
+		platform = &gNPC[i];
+
+		// Only process if the NPC is active
+		if (!(platform->cond & 0x80))
+			continue;
+
+		// Check if this NPC is a registered "Solid Platform" type
+		bool isPlatform = (platform->code_char == 25  || 
+		                   platform->code_char == 149 || 
+		                   platform->code_char == 157 || 
+		                   platform->code_char == 185 || 
+		                   platform->code_char == 186 || 
+		                   (platform->code_char == 303 && platform->ani_no < 3));
+
+		if (!isPlatform)
+			continue;
+
+		// Loop through all other NPCs to see if they are touching this platform
+		for (j = 0; j < NPC_MAX; ++j)
+		{
+			if (i == j) continue; // Don't collide with self
+
+			passenger = &gNPC[j];
+
+			// Passenger must be active, not ignore solidity, and have a valid type
+			if (!(passenger->cond & 0x80)) continue;
+			if (passenger->bits & NPC_IGNORE_SOLIDITY) continue;
+			if (passenger->code_char == 0) continue;
+
+			// Handle custom hitbox symmetry bit (0x1000)
+			int p_back  = platform->hit.back;
+			int pass_front = (passenger->bits & 0x1000) ? passenger->hit.back : passenger->hit.front;
+			int pass_back  = passenger->hit.back;
+
+			// --- 1. Horizontal Collision (Walls) ---
+			if (passenger->y - passenger->hit.top < platform->y + platform->hit.bottom - 0x600 &&
+				passenger->y + passenger->hit.bottom > platform->y - platform->hit.top + 0x600)
+			{
+				// Hit Left Side of Platform
+				if (passenger->x - pass_back < platform->x + p_back && passenger->x - pass_back > platform->x)
+				{
+					if (passenger->xm < 0x200) passenger->xm += 0x200;
+					passenger->flag |= 1; // Mark Left Wall hit
+				}
+				// Hit Right Side of Platform
+				else if (passenger->x + pass_front > platform->x - p_back && passenger->x + pass_front < platform->x)
+				{
+					if (passenger->xm < -0x200) passenger->xm -= 0x200;
+					passenger->flag |= 4; // Mark Right Wall hit
+				}
+			}
+
+			// --- 2. Vertical Collision (Ceiling) ---
+			// Check if horizontal alignment overlaps
+			if (passenger->x - pass_back < platform->x + p_back - 0x600 &&
+				passenger->x + pass_front > platform->x - p_back + 0x600)
+			{
+				// Hit Bottom of Platform (Passenger's Head)
+				if (passenger->y - passenger->hit.top < platform->y + platform->hit.bottom &&
+					passenger->y - passenger->hit.top > platform->y)
+				{
+					if (passenger->ym < 0) passenger->ym = 0;
+					passenger->flag |= 2; // Mark Ceiling hit
+				}
+			}
+
+			// --- 3. Vertical Collision (Floor / Riding) ---
+			// If horizontally aligned over the top
+			if (passenger->x - pass_back < platform->x + p_back - 0x600 &&
+				passenger->x + pass_front > platform->x - p_back + 0x600)
+			{
+				// Hit Top of Platform (Passenger's Feet)
+				if (passenger->y + passenger->hit.bottom > platform->y - platform->hit.top &&
+					passenger->y + passenger->hit.bottom < platform->y + 0x600)
+				{
+					// If the passenger is falling onto or standing on the platform
+					if (passenger->ym > platform->ym)
+					{
+						// Snap passenger to the top of the platform
+						passenger->y = platform->y - platform->hit.top - passenger->hit.bottom + 0x200;
+						passenger->ym = platform->ym; // Inherit vertical speed
+						passenger->x += platform->xm; // Inherit horizontal speed (The "Ride" mechanic)
+					}
+					passenger->flag |= 8; // Mark Floor hit
+				}
+			}
+		}
+	}
+}
+
 static int ModeAction(void)
 {
 	int frame_x;
@@ -745,6 +843,7 @@ static int ModeAction(void)
 			HitBulletMap();
 			HitNpCharBullet();
 			HitBossBullet();
+			HitNpCharNpChar();
 			if (g_GameFlags & 2)
 				ShootBullet();
 			ActBullet();

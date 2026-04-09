@@ -148,9 +148,24 @@ BOOL SaveProfile(const char *name)
 	return TRUE;
 }
 
+// Modded LoadProfile (sub_41D255)
+// Matches the "Cave Story Redesign" binary exactly.
 BOOL LoadProfile(const char *name)
 {
+	int i;
 	FILE *fp;
+	unsigned char buffer[0x604]; // Exactly 1540 bytes
+	
+	// Headers and Magic Numbers
+	const char *head = "Do041220";
+	
+	// New global variables for the mod
+	extern unsigned char gGrappleState;   // 0x493804
+	extern int gCurlyShoot_wait;         // 0x49E1E4
+
+	// [MOD] Loading a game resets the Grapple/Jetpack state immediately
+	gGrappleState = 0;
+
 	PROFILE profile;
 	std::string path;
 
@@ -165,128 +180,72 @@ BOOL LoadProfile(const char *name)
 	if (fp == NULL)
 		return FALSE;
 
-	// Check header code
-	fread(profile.code, 8, 1, fp);
-	if (memcmp(profile.code, gProfileCode, 8) != 0)
+	if (fp == NULL)
+		return FALSE;
+
+	// Check header code ("Do041220")
+	unsigned char check_head[8];
+	fread(check_head, 8, 1, fp);
+	if (memcmp(check_head, head, 8) != 0)
 	{
-#ifdef FIX_BUGS
-		fclose(fp);	// The original game forgets to close the file
-#endif
+		fclose(fp);
 		return FALSE;
 	}
 
-	// Read data
+	// Read entire valid data block
 	fseek(fp, 0, SEEK_SET);
-	memset(&profile, 0, sizeof(PROFILE));
-	fread(profile.code, 8, 1, fp);
-	profile.stage = File_ReadLE32(fp);
-	profile.music = (MusicID)File_ReadLE32(fp);
-	profile.x = File_ReadLE32(fp);
-	profile.y = File_ReadLE32(fp);
-	profile.direct = File_ReadLE32(fp);
-	profile.max_life = File_ReadLE16(fp);
-	profile.star = File_ReadLE16(fp);
-	profile.life = File_ReadLE16(fp);
-	profile.a = File_ReadLE16(fp);
-	profile.select_arms = File_ReadLE32(fp);
-	profile.select_item = File_ReadLE32(fp);
-	profile.equip = File_ReadLE32(fp);
-	profile.unit = File_ReadLE32(fp);
-	profile.counter = File_ReadLE32(fp);
-	for (int arm = 0; arm < 8; arm++)
+	memset(buffer, 0, 0x604);
+	if (fread(buffer, 0x604, 1, fp) != 1)
 	{
-		profile.arms[arm].code = File_ReadLE32(fp);
-		profile.arms[arm].level = File_ReadLE32(fp);
-		profile.arms[arm].exp = File_ReadLE32(fp);
-		profile.arms[arm].max_num = File_ReadLE32(fp);
-		profile.arms[arm].num = File_ReadLE32(fp);
+		fclose(fp);
+		return FALSE;
 	}
-	for (int item = 0; item < 32; item++)
-		profile.items[item].code = File_ReadLE32(fp);
-	for (int stage = 0; stage < 8; stage++)
-	{
-		profile.permitstage[stage].index = File_ReadLE32(fp);
-		profile.permitstage[stage].event = File_ReadLE32(fp);
-	}
-	fread(profile.permit_mapping, 0x80, 1, fp);
-	fread(profile.FLAG, 4, 1, fp);
-	fread(profile.flags, 1000, 1, fp);
-
-	// Custom
-	fread(profile.extra_code, 0x10, 1, fp);
-
-	if (memcmp(profile.extra_code, gProfileCodeExtra, 0x10) == 0)
-	{
-		profile.MIMCurrentNum = File_ReadLE32(fp);
-
-		profile.physics_normal.max_dash = File_ReadLE32(fp);
-		profile.physics_normal.max_move = File_ReadLE32(fp);
-		profile.physics_normal.gravity1 = File_ReadLE32(fp);
-		profile.physics_normal.gravity2 = File_ReadLE32(fp);
-		profile.physics_normal.dash1 = File_ReadLE32(fp);
-		profile.physics_normal.dash2 = File_ReadLE32(fp);
-		profile.physics_normal.resist = File_ReadLE32(fp);
-		profile.physics_normal.jump = File_ReadLE32(fp);
-
-		profile.physics_underwater.max_dash = File_ReadLE32(fp);
-		profile.physics_underwater.max_move = File_ReadLE32(fp);
-		profile.physics_underwater.gravity1 = File_ReadLE32(fp);
-		profile.physics_underwater.gravity2 = File_ReadLE32(fp);
-		profile.physics_underwater.dash1 = File_ReadLE32(fp);
-		profile.physics_underwater.dash2 = File_ReadLE32(fp);
-		profile.physics_underwater.resist = File_ReadLE32(fp);
-		profile.physics_underwater.jump = File_ReadLE32(fp);
-
-		profile.no_splash_or_air_limit_underwater = File_ReadLE32(fp);
-	}
-
 	fclose(fp);
 
-	// Set things
-	gSelectedArms = profile.select_arms;
-	gSelectedItem = profile.select_item;
-	gCounter = profile.counter;
+	// Map buffer to Global Variables
+	// Offsets derived from the ASM's local stack assignments
+	gSelectedArms = *(int*)(buffer + 0x24);
+	gSelectedItem = *(int*)(buffer + 0x28);
+	gCounter      = *(int*)(buffer + 0x34);
 
-	memcpy(gArmsData, profile.arms, sizeof(gArmsData));
-	memcpy(gItemData, profile.items, sizeof(gItemData));
-	memcpy(gPermitStage, profile.permitstage, sizeof(gPermitStage));
-	memcpy(gMapping, profile.permit_mapping, sizeof(gMapping));
-	memcpy(gFlagNPC, profile.flags, sizeof(gFlagNPC));
+	memcpy(gArmsData,    buffer + 0x38,  0xA0);
+	memcpy(gItemData,    buffer + 0xD8,  0x80);
+	memcpy(gPermitStage, buffer + 0x158, 0x40);
+	memcpy(gMapping,     buffer + 0x198, 0x80);
+	memcpy(gFlagNPC,     buffer + 0x21C, 1000);
 
-	// Load stage
-	ChangeMusic(profile.music);
+	// Load Stage and Music
+	ChangeMusic((MusicID)*(int*)(buffer + 0x0C));
 	InitMyChar();
-	if (!TransferStage(profile.stage, 0, 0, 1))
+
+	// TransferStage(stage, event, x, y)
+	if (!TransferStage(*(int*)(buffer + 0x08), 0, 0, 1))
 		return FALSE;
 
-	// Set character properties
-	gMC.equip = profile.equip;
-	gMC.unit = profile.unit;
-	gMC.direct = profile.direct;
-	gMC.max_life = profile.max_life;
-	gMC.life = profile.life;
-	gMC.star = profile.star;
+	// Set Character Properties
+	gMC.equip    = *(int*)(buffer + 0x2C);
+	gMC.unit     = *(int*)(buffer + 0x30);
+	gMC.direct   = *(int*)(buffer + 0x18);
+	gMC.max_life = *(short*)(buffer + 0x1C);
+	gMC.life     = *(short*)(buffer + 0x20);
+	gMC.star     = *(short*)(buffer + 0x1E);
+	
 	gMC.cond = 0x80;
 	gMC.air = 1000;
-	gMC.lifeBr = profile.life;
-	gMC.x = profile.x;
-	gMC.y = profile.y;
+	gMC.lifeBr = gMC.life;
+	gMC.x = *(int*)(buffer + 0x10);
+	gMC.y = *(int*)(buffer + 0x14);
 
-	gMC.rect_arms.left = (gArmsData[gSelectedArms].code % 10) * 24;
-	gMC.rect_arms.right = gMC.rect_arms.left + 24;
-	gMC.rect_arms.top = (gArmsData[gSelectedArms].code / 10) * 32;
+	// [MOD] Custom Weapon Rect Logic
+	// Redesign uses a 10-column layout for the Arms spritesheet
+	// and 32px height increments.
+	int arms_code = gArmsData[gSelectedArms].code;
+	gMC.rect_arms.left   = (arms_code % 10) * 24;
+	gMC.rect_arms.right  = gMC.rect_arms.left + 24;
+	gMC.rect_arms.top    = (arms_code / 10) * 32;
 	gMC.rect_arms.bottom = gMC.rect_arms.top + 16;
 
-	// Custom
-	if (memcmp(profile.extra_code, gProfileCodeExtra, 0x10) == 0)
-	{
-		gMIMCurrentNum = profile.MIMCurrentNum;
-		gMC.physics_normal = profile.physics_normal;
-		gMC.physics_underwater = profile.physics_underwater;
-		gMC.no_splash_or_air_limit_underwater = profile.no_splash_or_air_limit_underwater;
-	}
-
-	// Reset stuff
+	// Post-Load Maintenance
 	ClearFade();
 	SetFrameMyChar();
 	SetFrameTargetMyChar(16);
@@ -294,6 +253,8 @@ BOOL LoadProfile(const char *name)
 	CutNoise();
 	InitStar();
 	ClearValueView();
+
+	// [MOD] Custom reset for a specific boss/cutscene variable
 	gCurlyShoot_wait = 0;
 
 	return TRUE;

@@ -1205,6 +1205,19 @@ int TextScriptProc(void)
 						SetMyCharDirect(z);
 						gTS.p_read += 8;
 					}
+					else if (IS_COMMAND('M','Y','V'))
+					{
+					    gMC.xm += GetTextScriptNo(gTS.p_read + 4) * 8;
+					    gMC.ym += GetTextScriptNo(gTS.p_read + 9) * 8;
+					    gTS.p_read += 13;
+					}
+					else if (IS_COMMAND('S','B','P'))
+					{
+						extern int gOmegaBaseX; extern int gOmegaBaseY;
+   						gOmegaBaseX = GetTextScriptNo(gTS.p_read + 4) << 13;
+   						gOmegaBaseY = GetTextScriptNo(gTS.p_read + 9) << 13;
+   						gTS.p_read += 13;
+					}
 					else if (IS_COMMAND('M','Y','B'))
 					{
 						z = GetTextScriptNo(gTS.p_read + 4);

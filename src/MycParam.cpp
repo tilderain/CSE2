@@ -134,15 +134,38 @@ BOOL IsMaxExpMyChar(void)
 
 	return FALSE;
 }
+#include "Flags.h"
+// Custom Mod Function: Handles Player Death and the "Second Wind" Item
+void HandlePlayerDeath(void)
+{
+	// 0x1518 = 5400. Flag 5400 checks if the player owns the Revive Item.
+	if (GetNPCFlag(5400)) 
+	{
+		// 0x1522 = 5410. Flag 5410 checks if the Revive Item was already consumed.
+		if (!GetNPCFlag(5410)) 
+		{
+			// Player survives! Clamp health to 0 to prevent negative overflow.
+			// The TSC script will manually refill the player's health.
+			gMC.life = 0;
+			goto TriggerScript;
+		}
+	}
+
+	// Normal Death Sequence (Item missing or already used)
+	PlaySoundObject(17, SOUND_MODE_PLAY);             // 0x11: Player death sound
+	SetDestroyNpChar(gMC.x, gMC.y, 0x1400, 64);       // 0x40: Spawn 64 smoke clouds
+
+TriggerScript:
+	// Start Event 40 (0x28). 
+	// If reviving, this script heals the player and sets Flag 5410.
+	// If dying, this script shows the Game Over screen.
+	StartTextScript(40); 
+}
 
 void DamageMyChar(int damage)
 {
-#ifdef FIX_BUGS
-	if (!(g_GameFlags & 2))
-#else
-	// I'm preeeetty sure this is a typo. The Linux port optimised it out.
+	// (Vanilla bug preserved: bitwise OR instead of bitwise AND)
 	if (!(g_GameFlags | 2))
-#endif
 		return;
 
 	if (gMC.shock)
@@ -153,12 +176,7 @@ void DamageMyChar(int damage)
 	gMC.cond &= ~1;
 	gMC.shock = 128;
 
-	if (gMC.unit == 1)
-	{
-		// Another weird case where there *has* to be an empty 'if' here to produce the same assembly.
-		// Chances are there used to be some commented-out code here.
-	}
-	else
+	if (gMC.unit != 1)
 	{
 		gMC.ym = -0x400;
 	}
@@ -167,14 +185,15 @@ void DamageMyChar(int damage)
 
 	// Lose a whimsical star
 	if (gMC.equip & EQUIP_WHIMSICAL_STAR && gMC.star > 0)
-		gMC.star = (short)gMC.star - 1;	// For some reason, this does a cast to short. Might not be accurate to the original source code (possibly, Pixel was just being careful about int size/conversion, or this is from some weird macro)
+		gMC.star = (short)gMC.star - 1;
 
-	// Lose experience
+	// Lose experience (Halved if Arms Barrier is equipped)
 	if (gMC.equip & EQUIP_ARMS_BARRIER)
 		gArmsData[gSelectedArms].exp -= damage;
 	else
 		gArmsData[gSelectedArms].exp -= damage * 2;
 
+	// Handle level-downs from massive damage
 	while (gArmsData[gSelectedArms].exp < 0)
 	{
 		if (gArmsData[gSelectedArms].level > 1)
@@ -187,7 +206,7 @@ void DamageMyChar(int damage)
 			gArmsData[gSelectedArms].exp = gArmsLevelTable[arms_code].exp[lv] + gArmsData[gSelectedArms].exp;
 
 			if (gMC.life > 0 && gArmsData[gSelectedArms].code != 13)
-				SetCaret(gMC.x, gMC.y, 10, 2);
+				SetCaret(gMC.x, gMC.y, CARET_LEVEL_UP, DIR_RIGHT); // 10, 2
 		}
 		else
 		{
@@ -198,15 +217,13 @@ void DamageMyChar(int damage)
 	// Tell player how much damage was taken
 	SetValueView(&gMC.x, &gMC.y, -damage);
 
-	// Death
+	// [MOD] Hook to Code Cave
 	if (gMC.life <= 0)
 	{
-		PlaySoundObject(17, SOUND_MODE_PLAY);
-		gMC.cond = 0;
-		SetDestroyNpChar(gMC.x, gMC.y, 0x1400, 0x40);
-		StartTextScript(40);
+		HandlePlayerDeath(); // Jumps to FUN_00493970
 	}
 }
+
 
 void ZeroArmsEnergy_All(void)
 {

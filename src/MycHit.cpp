@@ -732,22 +732,119 @@ int JudgeHitMyCharNPC4(NPCHAR *npc)
 
 	return hit;
 }
+// Handles the remaining collision types (Hearts, Damage, Scripts)
+void HandleModdedNPCPickups(int hit, int i)
+{
+	// Heart Drop (Code 0x57 / 87)
+	if (hit && gNPC[i].code_char == 87)
+	{
+		PlaySoundObject(20, SOUND_MODE_PLAY);
+		AddLifeMyChar(gNPC[i].exp);
+		gNPC[i].cond = 0; // Destroy drop
+	}
 
-void HitMyCharNpChar(void)
+	// Script Execution (Touch)
+	// If the NPC has the "Run Script on Touch" bit (0x100)
+	if (!(g_GameFlags & 4) && hit && (gNPC[i].bits & NPC_EVENT_WHEN_TOUCHED))
+	{
+		StartTextScript(gNPC[i].code_event);
+	}
+
+	// Player Damage Collision
+	if ((g_GameFlags & 2) && !(gNPC[i].bits & NPC_INTERACTABLE))
+	{
+		// If NPC only hurts when touched on specific sides (e.g. spikes)
+		if (gNPC[i].bits & NPC_REAR_AND_TOP_DONT_HURT)
+		{
+			if (hit & 4 && gNPC[i].xm < 0) DamageMyChar(gNPC[i].damage);
+			if (hit & 1 && gNPC[i].xm > 0) DamageMyChar(gNPC[i].damage);
+			if (hit & 8 && gNPC[i].ym < 0) DamageMyChar(gNPC[i].damage);
+			if (hit & 2 && gNPC[i].ym > 0) DamageMyChar(gNPC[i].damage);
+		}
+		else
+		{
+			// Normal enemy damage
+			if (hit && gNPC[i].damage != 0 && !(g_GameFlags & 4))
+			{
+				DamageMyChar(gNPC[i].damage);
+			}
+		}
+	}
+
+	// [MOD] Script Execution (Interact / Down Key)
+	// The modder explicitly added logic to force Quote to stop moving (xm = 0)
+	// when he interacts with an NPC, preventing sliding during dialogue.
+	if (!(g_GameFlags & 4) && hit && (gMC.cond & 1) && (gNPC[i].bits & NPC_INTERACTABLE))
+	{
+		StartTextScript(gNPC[i].code_event);
+		gMC.xm = 0; // [MOD] Stop Quote's momentum instantly
+		gMC.ques = 0;
+	}
+
+	// Find the next active NPC to process (to return to the main loop)
+	while (++i < NPC_MAX)
+	{
+		if (gNPC[i].cond & 0x80)
+		{
+			// Reset the loop state for the next NPC and jump back into the main loop logic
+			// (In C, this is handled naturally by returning to the 'for' loop. In ASM, 
+			// the modder had to manually reconstruct the loop mechanics).
+			return; 
+		}
+	}
+
+	if (gMC.ques)
+		SetCaret(gMC.x, gMC.y, CARET_QUESTION_MARK, DIR_LEFT);
+}
+#include "ArmsItem.h"
+void AddCustomWeaponAmmo(int amount, int weapon_code)
 {
 	int i;
-	int hit = 0;
+	
+	// Try to find the weapon in the player's inventory
+	for (i = 0; i < 8; i++)
+	{
+		if (gArmsData[i].code == weapon_code)
+			break;
+	}
+
+	// If not found, try to fallback to the Super Missile (ID 10)
+	if (i == 8)
+	{
+		for (i = 0; i < 8; i++)
+		{
+			if (gArmsData[i].code == 10)
+				break;
+		}
+
+		if (i == 8)
+			return; // Neither weapon is in the inventory
+	}
+
+	// Add the ammo
+	gArmsData[i].max_num += amount;
+
+	// Clamp current ammo so it doesn't exceed the new max
+	if (gArmsData[i].num < gArmsData[i].max_num)
+	{
+		gArmsData[i].max_num = gArmsData[i].num; // Note: In the decomp, this sets max to current. It's likely a bug in the mod, meant to be 'num = max_num'.
+	}
+}
+void HitMyCharNpChar(void)
+{
+	int hit;
+	int i;
 
 	if (!(gMC.cond & 0x80) || gMC.cond & 2)
 		return;
 
 	for (i = 0; i < NPC_MAX; ++i)
 	{
+		// If NPC is not active, skip it
 		if (!(gNPC[i].cond & 0x80))
 			continue;
 
-		hit = 0;
-
+		// 1. Calculate Physical Collision
 		if (gNPC[i].bits & NPC_SOLID_SOFT)
 		{
 			hit = JudgeHitMyCharNPC(&gNPC[i]);
@@ -763,122 +860,163 @@ void HitMyCharNpChar(void)
 			hit = JudgeHitMyCharNPC3(&gNPC[i]);
 		}
 
-		// Special NPCs (pickups)
-		if (hit != 0 && gNPC[i].code_char == 1)
+		// 2. Item Pickups
+		// If we hit an item, we delete it and MUST 'continue' to the next NPC
+		// so we don't accidentally take damage from a "dead" item.
+		if (hit)
 		{
-			PlaySoundObject(14, SOUND_MODE_PLAY);
-			AddExpMyChar(gNPC[i].exp);
-			gNPC[i].cond = 0;
+			if (gNPC[i].code_char == 1) // EXP
+			{
+				PlaySoundObject(14, SOUND_MODE_PLAY);
+				AddExpMyChar(gNPC[i].exp);
+				gNPC[i].cond = 0;
+				continue; 
+			}
+			
+			if (gNPC[i].code_char == 76) // [MOD] Custom Ammo Pickup
+			{
+				PlaySoundObject(37, SOUND_MODE_PLAY);
+				AddCustomWeaponAmmo(gNPC[i].code_event, gNPC[i].exp);
+				gNPC[i].cond = 0;
+				continue;
+			}
+			
+			if (gNPC[i].code_char == 86) // Missile Refill
+			{
+				PlaySoundObject(42, SOUND_MODE_PLAY);
+				AddBulletMyChar(gNPC[i].code_event, gNPC[i].exp);
+				gNPC[i].cond = 0;
+				continue;
+			}
+			
+			if (gNPC[i].code_char == 87) // Heart
+			{
+				PlaySoundObject(20, SOUND_MODE_PLAY);
+				AddLifeMyChar(gNPC[i].exp);
+				gNPC[i].cond = 0;
+				continue;
+			}
 		}
 
-		if (hit != 0 && gNPC[i].code_char == 86)
+		// 3. Touch Scripts
+		if (!(g_GameFlags & 4) && hit && (gNPC[i].bits & NPC_EVENT_WHEN_TOUCHED))
 		{
-			PlaySoundObject(42, SOUND_MODE_PLAY);
-			AddBulletMyChar(gNPC[i].code_event, gNPC[i].exp);
-			gNPC[i].cond = 0;
-		}
-
-		if (hit != 0 && gNPC[i].code_char == 87)
-		{
-			PlaySoundObject(20, SOUND_MODE_PLAY);
-			AddLifeMyChar(gNPC[i].exp);
-			gNPC[i].cond = 0;
-		}
-
-		// Run event on contact
-		if (!(g_GameFlags & 4) && hit != 0 && gNPC[i].bits & NPC_EVENT_WHEN_TOUCHED)
 			StartTextScript(gNPC[i].code_event);
+		}
 
-		// NPC damage
-		if (g_GameFlags & 2 && !(gNPC[i].bits & NPC_INTERACTABLE))
+		// 4. Enemy Damage
+		// Only run if the NPC wasn't an item (which would have hit a 'continue' above)
+		if ((g_GameFlags & 2) && !(gNPC[i].bits & NPC_INTERACTABLE))
 		{
 			if (gNPC[i].bits & NPC_REAR_AND_TOP_DONT_HURT)
 			{
-				if (hit & 4 && gNPC[i].xm < 0)
-					DamageMyChar(gNPC[i].damage);
-				if (hit & 1 && gNPC[i].xm > 0)
-					DamageMyChar(gNPC[i].damage);
-				if (hit & 8 && gNPC[i].ym < 0)
-					DamageMyChar(gNPC[i].damage);
-				if (hit & 2 && gNPC[i].ym > 0)
-					DamageMyChar(gNPC[i].damage);
+				if (hit & 4 && gNPC[i].xm < 0) DamageMyChar(gNPC[i].damage);
+				if (hit & 1 && gNPC[i].xm > 0) DamageMyChar(gNPC[i].damage);
+				if (hit & 8 && gNPC[i].ym < 0) DamageMyChar(gNPC[i].damage);
+				if (hit & 2 && gNPC[i].ym > 0) DamageMyChar(gNPC[i].damage);
 			}
-			else if (hit != 0 && gNPC[i].damage && !(g_GameFlags & 4))
+			else if (hit && gNPC[i].damage != 0 && !(g_GameFlags & 4))
 			{
 				DamageMyChar(gNPC[i].damage);
 			}
 		}
 
-		// Interaction
-		if (!(g_GameFlags & 4) && hit != 0 && gMC.cond & 1 && gNPC[i].bits & NPC_INTERACTABLE)
+		// 5. Interaction Scripts (Pressing Down)
+		if (!(g_GameFlags & 4) && hit && (gMC.cond & 1))
 		{
-			StartTextScript(gNPC[i].code_event);
-			gMC.xm = 0;
-			gMC.ques = FALSE;
+			if (gNPC[i].bits & NPC_INTERACTABLE)
+			{
+				StartTextScript(gNPC[i].code_event);
+				gMC.xm = 0;   // [MOD] Stop Quote's momentum instantly
+				gMC.ques = 0; // Clear the question mark
+			}
 		}
 	}
 
-	// Create question mark when NPC hasn't been interacted with
 	if (gMC.ques)
 		SetCaret(gMC.x, gMC.y, 9, 0);
 }
-
+// HitMyCharBoss (Modded)
 void HitMyCharBoss(void)
 {
 	int b;
-	int hit = 0;
+	int hit;
 
-	if (!(gMC.cond & 0x80) || gMC.cond & 2)
+	// Only process if the player is active and not hidden
+	if (!(gMC.cond & 0x80) || (gMC.cond & 2))
 		return;
 
-	for (b = 0; b < BOSS_MAX; ++b)
+	// Loop through all 20 possible boss parts
+	for (b = 0; b < 20; ++b) // 20 is BOSS_MAX
 	{
+		// Skip inactive boss parts
 		if (!(gBoss[b].cond & 0x80))
 			continue;
 
-		hit = 0;
-
-		if (gBoss[b].bits & NPC_SOLID_SOFT)
+		// 1. Calculate Collision
+		if (!(gBoss[b].bits & NPC_IGNORE_SOLIDITY))
 		{
-			hit = JudgeHitMyCharNPC(&gBoss[b]);
-			gMC.flag |= hit;
-		}
-		else if (gBoss[b].bits & NPC_SOLID_HARD)
-		{
-			hit = JudgeHitMyCharNPC4(&gBoss[b]);
-			gMC.flag |= hit;
+			if (!(gBoss[b].bits & NPC_SOLID_SOFT))
+			{
+				hit = JudgeHitMyCharNPC3(&gBoss[b]);
+			}
+			else
+			{
+				// Hard Collision (Solid Block)
+				hit = JudgeHitMyCharNPC4(&gBoss[b]);
+				gMC.flag |= hit;
+			}
 		}
 		else
 		{
-			hit = JudgeHitMyCharNPC3(&gBoss[b]);
+			// Alternate Hard Collision
+			hit = JudgeHitMyCharNPC(&gBoss[b]);
+			gMC.flag |= hit;
 		}
 
-		if (!(g_GameFlags & 4) && hit != 0 && gBoss[b].bits & NPC_EVENT_WHEN_TOUCHED)
+		// 2. Touch Scripts
+		// If the boss part has the "Run Script on Touch" bit (0x100)
+		if (!(g_GameFlags & 4) && hit && (gBoss[b].bits & NPC_EVENT_WHEN_TOUCHED))
 		{
 			StartTextScript(gBoss[b].code_event);
-			gMC.ques = FALSE;
+			gMC.ques = FALSE; // Hide interact icon
 		}
 
-		if (gBoss[b].bits & NPC_REAR_AND_TOP_DONT_HURT)
+		// 3. Player Damage
+		if (!(gBoss[b].bits & NPC_REAR_AND_TOP_DONT_HURT))
 		{
-			if (hit & 4 && gBoss[b].xm < 0)
+			// Normal enemy damage
+			if (hit && gBoss[b].damage != 0 && !(g_GameFlags & 4))
+			{
 				DamageMyChar(gBoss[b].damage);
-			if (hit & 1 && gBoss[b].xm > 0)
-				DamageMyChar(gBoss[b].damage);
+			}
 		}
-		else if (hit != 0 && gBoss[b].damage != 0 && !(g_GameFlags & 4))
+		else
 		{
-			DamageMyChar(gBoss[b].damage);
+			// Directional damage (only hurts if hit from the front)
+			// Note: The modder removed the Y-axis damage checks here, 
+			// unlike what they did for normal NPCs!
+			if ((hit & 4) && gBoss[b].xm < 0)
+				DamageMyChar(gBoss[b].damage);
+			if ((hit & 1) && gBoss[b].xm > 0)
+				DamageMyChar(gBoss[b].damage);
 		}
 
-		if (!(g_GameFlags & 4) && hit != 0 && gMC.cond & 1 && gBoss[b].bits & NPC_INTERACTABLE)
+		// 4. [MOD] Interaction Scripts (Pressing Down)
+		// The modder explicitly added logic to force Quote to stop moving (xm = 0)
+		// when he interacts with a boss part, mirroring the NPC interaction fix.
+		if (!(g_GameFlags & 4) && hit && (gMC.cond & 1))
 		{
-			StartTextScript(gBoss[b].code_event);
-			gMC.xm = 0;
-			gMC.ques = FALSE;
+			if (gBoss[b].bits & NPC_INTERACTABLE)
+			{
+				StartTextScript(gBoss[b].code_event);
+				gMC.xm = 0;       // [MOD] Stop Quote's momentum instantly when talking
+				gMC.ques = FALSE; // Clear the question mark
+			}
 		}
 	}
 
+	// Draw Interact Indicator if applicable
 	if (gMC.ques)
-		SetCaret(gMC.x, gMC.y, 9, 0);
+		SetCaret(gMC.x, gMC.y, CARET_QUESTION_MARK, DIR_LEFT);
 }

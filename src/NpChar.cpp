@@ -28,25 +28,6 @@ int gSuperYpos;
 
 const char* const gPassPixEve = "PXE";
 
-void SetUniqueParameter(NPCHAR *npc)
-{
-	int code = npc->code_char;
-	npc->surf = (SurfaceID)gNpcTable[code].surf;
-	npc->hit_voice = gNpcTable[code].hit_voice;
-	npc->destroy_voice = gNpcTable[code].destroy_voice;
-	npc->damage = gNpcTable[code].damage;
-	npc->size = gNpcTable[code].size;
-	npc->life = gNpcTable[code].life;
-	npc->hit.front = gNpcTable[code].hit.front * 0x200;
-	npc->hit.back = gNpcTable[code].hit.back * 0x200;
-	npc->hit.top = gNpcTable[code].hit.top * 0x200;
-	npc->hit.bottom = gNpcTable[code].hit.bottom * 0x200;
-	npc->view.front = gNpcTable[code].view.front * 0x200;
-	npc->view.back = gNpcTable[code].view.back * 0x200;
-	npc->view.top = gNpcTable[code].view.top * 0x200;
-	npc->view.bottom = gNpcTable[code].view.bottom * 0x200;
-}
-
 void InitNpChar(void)
 {
 	memset(gNPC, 0, sizeof(gNPC));
@@ -130,9 +111,51 @@ BOOL LoadEvent(const char *path_event)
 	return TRUE;
 }
 
+// Custom Mod Function (Located at the 0x46F09A code cave)
+void ApplyEliteEnemyScaling(NPCHAR *npc)
+{
+	// In most Cave Story map editors, 0x400 is the "Option 2" flag.
+	// If this flag is checked in the map editor, the enemy becomes an "Elite".
+	if (npc->bits & 0x400)
+	{
+		npc->life *= 4;   // Health increased by 400% (life << 2)
+		npc->exp *= 2;    // EXP drops increased by 200% (exp << 1)
+		npc->damage *= 3; // Contact damage increased by 300%
+	}
+}
+
+// SetUniqueParameter (Replaces FUN_0046ee50)
+void SetUniqueParameter(NPCHAR *npc)
+{
+	int code = npc->code_char;
+
+	// Copy base stats from the global NPC Table
+	npc->surf = (SurfaceID)gNpcTable[code].surf;
+	npc->hit_voice = gNpcTable[code].hit_voice;
+	npc->destroy_voice = gNpcTable[code].destroy_voice;
+	npc->damage = gNpcTable[code].damage;
+	npc->size = gNpcTable[code].size;
+	npc->life = gNpcTable[code].life;
+	
+	npc->hit.front = gNpcTable[code].hit.front * 0x200;
+	npc->hit.back = gNpcTable[code].hit.back * 0x200;
+	npc->hit.top = gNpcTable[code].hit.top * 0x200;
+	npc->hit.bottom = gNpcTable[code].hit.bottom * 0x200;
+	
+	npc->view.front = gNpcTable[code].view.front * 0x200;
+	npc->view.back = gNpcTable[code].view.back * 0x200;
+	npc->view.top = gNpcTable[code].view.top * 0x200;
+	npc->view.bottom = gNpcTable[code].view.bottom * 0x200;
+
+	// [MOD] Hook into the newly created code cave
+	ApplyEliteEnemyScaling(npc);
+}
+
+// SetNpChar (Replaces the first function)
 void SetNpChar(int code_char, int x, int y, int xm, int ym, int dir, NPCHAR *npc, int start_index)
 {
 	int n = start_index;
+
 	while (n < NPC_MAX && gNPC[n].cond)
 		++n;
 
@@ -149,8 +172,11 @@ void SetNpChar(int code_char, int x, int y, int xm, int ym, int dir, NPCHAR *npc
 	gNPC[n].xm = xm;
 	gNPC[n].ym = ym;
 	gNPC[n].pNpc = npc;
-	gNPC[n].bits = gNpcTable[gNPC[n].code_char].bits;
-	gNPC[n].exp = gNpcTable[gNPC[n].code_char].exp;
+	
+	gNPC[n].bits = gNpcTable[code_char].bits;
+	gNPC[n].exp = gNpcTable[code_char].exp;
+	
+	// Apply unique parameters (and the Elite Scaling hook)
 	SetUniqueParameter(&gNPC[n]);
 }
 

@@ -268,31 +268,12 @@ void HitNpCharMap(void)
 {
 	int x, y;
 	int judg;
-
 	int offx[9];
 	int offy[9];
-
 	int i, j;
 
-	offx[0] = 0;
-	offx[1] = 1;
-	offx[2] = 0;
-	offx[3] = 1;
-	offx[4] = 2;
-	offx[5] = 2;
-	offx[6] = 2;
-	offx[7] = 0;
-	offx[8] = 1;
-
-	offy[0] = 0;
-	offy[1] = 0;
-	offy[2] = 1;
-	offy[3] = 1;
-	offy[4] = 0;
-	offy[5] = 1;
-	offy[6] = 2;
-	offy[7] = 2;
-	offy[8] = 2;
+	offx[0] = 0; offx[1] = 1; offx[2] = 0; offx[3] = 1; offx[4] = 2; offx[5] = 2; offx[6] = 2; offx[7] = 0; offx[8] = 1;
+	offy[0] = 0; offy[1] = 0; offy[2] = 1; offy[3] = 1; offy[4] = 0; offy[5] = 1; offy[6] = 2; offy[7] = 2; offy[8] = 2;
 
 	for (i = 0; i < NPC_MAX; ++i)
 	{
@@ -326,43 +307,57 @@ void HitNpCharMap(void)
 					if (gNPC[i].bits & NPC_IGNORE_TILE_44)
 						break;
 					// Fallthrough
+				
 				// Block
 				case 0x03:
 				case 0x05:
 				case 0x41:
 				case 0x43:
+				// [Mod] Expanded solid block tiles to match custom tilesets
+				case 0x06: case 0x07: case 0x08: case 0x09: case 0x0A:
+				case 0x18:
+				case 0x47: case 0x48: case 0x49: case 0x4A: case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:
+				case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F:
 					JadgeHitNpCharBlock(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
 				// Slopes
+				case 0x10: // [Mod] Added 0x10-0x17 (bottom-half/custom slopes)
 				case 0x50:
 					JudgeHitNpCharTriangleA(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x11:
 				case 0x51:
 					JudgeHitNpCharTriangleB(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x12:
 				case 0x52:
 					JudgeHitNpCharTriangleC(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x13:
 				case 0x53:
 					JudgeHitNpCharTriangleD(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x14:
 				case 0x54:
 					JudgeHitNpCharTriangleE(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x15:
 				case 0x55:
 					JudgeHitNpCharTriangleF(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x16:
 				case 0x56:
 					JudgeHitNpCharTriangleG(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
 
+				case 0x17:
 				case 0x57:
 					JudgeHitNpCharTriangleH(&gNPC[i], x + offx[j], y + offy[j]);
 					break;
@@ -451,13 +446,12 @@ void HitNpCharMap(void)
 					gNPC[i].flag |= 0x8000;
 					break;
 			}
-
-			if (gNPC[i].y > gWaterY + 0x800)
-				gNPC[i].flag |= 0x100;
 		}
+
+		if (gNPC[i].y > gWaterY + 0x800)
+			gNPC[i].flag |= 0x100;
 	}
 }
-
 #include "ArmsItem.h"
 #include "NpcTbl.h"
 #include <cstring>

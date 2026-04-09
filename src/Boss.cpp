@@ -237,45 +237,22 @@ void ActBossChar(void)
 void HitBossMap(void)
 {
 	int x, y;
-	unsigned char atrb[16];
+	unsigned char atrb;
 	int judg;
 	int offx[16];
 	int offy[16];
 	int b, j;
 
-	offx[0] = 0;
-	offx[1] = 1;
-	offx[2] = 0;
-	offx[3] = 1;
-	offx[4] = 2;
-	offx[5] = 2;
-	offx[6] = 2;
-	offx[7] = 0;
-	offx[8] = 1;
-	offx[9] = -1;
-	offx[10] = -1;
-	offx[11] = -1;
-	offx[12] = -1;
-	offx[13] = 0;
-	offx[14] = 1;
-	offx[15] = 2;
+	// Animation/Collision offsets for large (size >= 3) bosses
+	offx[0] = 0;  offx[1] = 1;  offx[2] = 0;  offx[3] = 1;
+	offx[4] = 2;  offx[5] = 2;  offx[6] = 2;  offx[7] = 0;
+	offx[8] = 1;  offx[9] = -1; offx[10] = -1; offx[11] = -1;
+	offx[12] = -1; offx[13] = 0;  offx[14] = 1;  offx[15] = 2;
 
-	offy[0] = 0;
-	offy[1] = 0;
-	offy[2] = 1;
-	offy[3] = 1;
-	offy[4] = 0;
-	offy[5] = 1;
-	offy[6] = 2;
-	offy[7] = 2;
-	offy[8] = 2;
-	offy[9] = -1;
-	offy[10] = 0;
-	offy[11] = 1;
-	offy[12] = 2;
-	offy[13] = -1;
-	offy[14] = -1;
-	offy[15] = -1;
+	offy[0] = 0;  offy[1] = 0;  offy[2] = 1;  offy[3] = 1;
+	offy[4] = 0;  offy[5] = 1;  offy[6] = 2;  offy[7] = 2;
+	offy[8] = 2;  offy[9] = -1; offy[10] = 0;  offy[11] = 1;
+	offy[12] = 2; offy[13] = -1; offy[14] = -1; offy[15] = -1;
 
 	for (b = 0; b < BOSS_MAX; ++b)
 	{
@@ -285,59 +262,54 @@ void HitBossMap(void)
 		if (gBoss[b].bits & NPC_IGNORE_SOLIDITY)
 			continue;
 
+		// Select number of collision points based on boss size
 		if (gBoss[b].size >= 3)
-		{
 			judg = 16;
-			x = gBoss[b].x / 0x10 / 0x200;
-			y = gBoss[b].y / 0x10 / 0x200;
-		}
 		else
-		{
 			judg = 4;
-			x = gBoss[b].x / 0x10 / 0x200;
-			y = gBoss[b].y / 0x10 / 0x200;
-		}
+
+		// Calculate tile-grid coordinates
+		x = gBoss[b].x / 16 / 0x200;
+		y = gBoss[b].y / 16 / 0x200;
 
 		gBoss[b].flag = 0;
+
 		for (j = 0; j < judg; ++j)
 		{
-			atrb[j] = GetAttribute(x + offx[j], y + offy[j]);
+			atrb = GetAttribute(x + offx[j], y + offy[j]);
 
-			switch (atrb[j])
+			switch (atrb)
 			{
+				// [Mod] If the NPC does NOT have the "Ignore Tile 44" bit, treat 0x44 as solid
 				case 0x44:
 					if (gBoss[b].bits & NPC_IGNORE_TILE_44)
 						break;
 					// Fallthrough
-				case 0x05:
-				case 0x41:
-				case 0x43:
+				
+				// [Mod] Drastically expanded solid tile list
+				// Includes 0x05-0x0C, 0x1A, 0x41, 0x43, 0x47-0x4F, and 0x59-0x5F
+				case 0x05: case 0x06: case 0x07: case 0x08:
+				case 0x09: case 0x0A: case 0x0B: case 0x0C:
+				case 0x1A: case 0x41: case 0x43:
+				case 0x47: case 0x48: case 0x49: case 0x4A: 
+				case 0x4B: case 0x4C: case 0x4D: case 0x4E: case 0x4F:
+				case 0x59: case 0x5A: case 0x5B: case 0x5C: 
+				case 0x5D: case 0x5E: case 0x5F:
 					JadgeHitNpCharBlock(&gBoss[b], x + offx[j], y + offy[j]);
 					break;
-				case 0x50:
-					JudgeHitNpCharTriangleA(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x51:
-					JudgeHitNpCharTriangleB(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x52:
-					JudgeHitNpCharTriangleC(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x53:
-					JudgeHitNpCharTriangleD(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x54:
-					JudgeHitNpCharTriangleE(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x55:
-					JudgeHitNpCharTriangleF(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x56:
-					JudgeHitNpCharTriangleG(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x57:
-					JudgeHitNpCharTriangleH(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
+
+				// Standard Slopes
+				case 0x50: JudgeHitNpCharTriangleA(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x51: JudgeHitNpCharTriangleB(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x52: JudgeHitNpCharTriangleC(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x53: JudgeHitNpCharTriangleD(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x54: JudgeHitNpCharTriangleE(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x55: JudgeHitNpCharTriangleF(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x56: JudgeHitNpCharTriangleG(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x57: JudgeHitNpCharTriangleH(&gBoss[b], x + offx[j], y + offy[j]); break;
+
+				// [Mod] Water & Solid Water Blocks
+				// In this mod, standard water (0x02/0x60) is ALSO treated as a solid block for bosses
 				case 0x02:
 				case 0x60:
 				case 0x61:
@@ -345,38 +317,16 @@ void HitBossMap(void)
 					JadgeHitNpCharBlock(&gBoss[b], x + offx[j], y + offy[j]);
 					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
 					break;
-				case 0x70:
-					JudgeHitNpCharTriangleA(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x71:
-					JudgeHitNpCharTriangleB(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x72:
-					JudgeHitNpCharTriangleC(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x73:
-					JudgeHitNpCharTriangleD(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x74:
-					JudgeHitNpCharTriangleE(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x75:
-					JudgeHitNpCharTriangleF(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x76:
-					JudgeHitNpCharTriangleG(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
-				case 0x77:
-					JudgeHitNpCharTriangleH(&gBoss[b], x + offx[j], y + offy[j]);
-					JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]);
-					break;
+
+				// Water Slopes (Standard)
+				case 0x70: JudgeHitNpCharTriangleA(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x71: JudgeHitNpCharTriangleB(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x72: JudgeHitNpCharTriangleC(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x73: JudgeHitNpCharTriangleD(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x74: JudgeHitNpCharTriangleE(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x75: JudgeHitNpCharTriangleF(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x76: JudgeHitNpCharTriangleG(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
+				case 0x77: JudgeHitNpCharTriangleH(&gBoss[b], x + offx[j], y + offy[j]); JudgeHitNpCharWater(&gBoss[b], x + offx[j], y + offy[j]); break;
 			}
 		}
 	}

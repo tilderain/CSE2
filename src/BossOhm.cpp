@@ -117,22 +117,31 @@ static void ActBoss01_5(void)
 			break;
 	}
 }
-
+	int gOmegaBaseX; // 0x494E6E
+	int gOmegaBaseY; // 0x494E72
+// Boss: Omega - ActBossChar_Omega
 void ActBossChar_Omega(void)
 {
+	int i;
+	int x, y;
+
+	// In this mod, Omega's base position is stored in global variables 
+	// rather than hardcoded map coordinates.
+
 	switch (gBoss[0].act_no)
 	{
 		case 0:
-			gBoss[0].x = 219 * 0x10 * 0x200;
-			gBoss[0].y = 16 * 0x10 * 0x200;
+			// Initialize Boss Core
+			gBoss[0].x = gOmegaBaseX;
+			gBoss[0].y = gOmegaBaseY;
 
 			gBoss[0].view.front = 40 * 0x200;
 			gBoss[0].view.top = 40 * 0x200;
 			gBoss[0].view.back = 40 * 0x200;
 			gBoss[0].view.bottom = 16 * 0x200;
 
-			gBoss[0].tgt_x = gBoss[0].x;
-			gBoss[0].tgt_y = gBoss[0].y;
+			gBoss[0].tgt_x = gOmegaBaseX;
+			gBoss[0].tgt_y = gOmegaBaseY;
 
 			gBoss[0].hit_voice = 52;
 
@@ -145,36 +154,33 @@ void ActBossChar_Omega(void)
 			gBoss[0].size = 3;
 			gBoss[0].exp = 1;
 			gBoss[0].code_event = 210;
-			gBoss[0].life = 400;
+			
+			// [MOD] Massive HP Buff: 400 -> 1400
+			gBoss[0].life = 1400; 
 
+			// Initialize Eyes/Mouth parts
 			gBoss[1].cond = 0x80;
-
 			gBoss[1].view.front = 12 * 0x200;
 			gBoss[1].view.top = 8 * 0x200;
 			gBoss[1].view.back = 12 * 0x200;
 			gBoss[1].view.bottom = 8 * 0x200;
-
 			gBoss[1].bits = NPC_IGNORE_SOLIDITY;
 
 			gBoss[2] = gBoss[1];
-
 			gBoss[1].direct = 0;
 			gBoss[2].direct = 2;
 
+			// Legs
 			gBoss[3].cond = 0x80;
-
 			gBoss[3].view.front = 24 * 0x200;
 			gBoss[3].view.top = 16 * 0x200;
 			gBoss[3].view.back = 16 * 0x200;
 			gBoss[3].view.bottom = 16 * 0x200;
-
 			gBoss[3].hit_voice = 52;
-
 			gBoss[3].hit.front = 8 * 0x200;
 			gBoss[3].hit.top = 8 * 0x200;
 			gBoss[3].hit.back = 8 * 0x200;
 			gBoss[3].hit.bottom = 8 * 0x200;
-
 			gBoss[3].bits = NPC_IGNORE_SOLIDITY;
 
 			gBoss[3].x = gBoss[0].x - (16 * 0x200);
@@ -182,18 +188,19 @@ void ActBossChar_Omega(void)
 			gBoss[3].direct = 0;
 
 			gBoss[4] = gBoss[3];
-
 			gBoss[4].direct = 2;
 			gBoss[3].x = gBoss[0].x + (16 * 0x200);
+
 			gBoss[5].cond = 0x80;
 			break;
 
-		case 20: // Rising out of the ground
+		case 20:
 			gBoss[0].act_no = 30;
 			gBoss[0].act_wait = 0;
 			gBoss[0].ani_no = 0;
 			// Fallthrough
 		case 30:
+			// Rising from sand
 			SetQuake(2);
 			gBoss[0].y -= 1 * 0x200;
 
@@ -205,27 +212,25 @@ void ActBossChar_Omega(void)
 				gBoss[0].act_wait = 0;
 				gBoss[0].act_no = 40;
 
-				if (gBoss[0].life > 280)
-					break;
+				// [MOD] Earlier Phase Transition: 280 -> 800 HP
+				if (gBoss[0].life <= 800)
+				{
+					gBoss[0].act_no = 110; // Enter Jumping/Pouncing Phase
 
-				gBoss[0].act_no = 110;
+					gBoss[0].bits |= NPC_SHOOTABLE;
+					gBoss[0].bits &= ~NPC_IGNORE_SOLIDITY;
+					gBoss[3].bits &= ~NPC_IGNORE_SOLIDITY;
+					gBoss[4].bits &= ~NPC_IGNORE_SOLIDITY;
 
-				gBoss[0].bits |= NPC_SHOOTABLE;
-				gBoss[0].bits &= ~NPC_IGNORE_SOLIDITY;
-				gBoss[3].bits &= ~NPC_IGNORE_SOLIDITY;
-				gBoss[4].bits &= ~NPC_IGNORE_SOLIDITY;
-
-				gBoss[3].act_no = 3;
-				gBoss[4].act_no = 3;
-				gBoss[5].hit.top = 16 * 0x200;
+					gBoss[3].act_no = 3;
+					gBoss[4].act_no = 3;
+					gBoss[5].hit.top = 16 * 0x200;
+				}
 			}
-
 			break;
 
 		case 40:
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait == 48)
+			if (++gBoss[0].act_wait == 48)
 			{
 				gBoss[0].act_wait = 0;
 				gBoss[0].act_no = 50;
@@ -233,13 +238,10 @@ void ActBossChar_Omega(void)
 				gBoss[5].hit.top = 16 * 0x200;
 				PlaySoundObject(102, SOUND_MODE_PLAY);
 			}
-
 			break;
 
-		case 50: // Open mouth
-			++gBoss[0].count1;
-
-			if (gBoss[0].count1 > 2)
+		case 50: // Opening mouth
+			if (++gBoss[0].count1 > 2)
 			{
 				gBoss[0].count1 = 0;
 				++gBoss[0].count2;
@@ -253,42 +255,36 @@ void ActBossChar_Omega(void)
 				gBoss[0].hit.front = 16 * 0x200;
 				gBoss[0].hit.back = 16 * 0x200;
 			}
-
 			break;
 
-		case 60: // Shoot out of mouth
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait > 20 && gBoss[0].act_wait < 80 && !(gBoss[0].act_wait % 3))
+		case 60: // Shooting pattern
+			if (++gBoss[0].act_wait > 20 && gBoss[0].act_wait < 80 && !(gBoss[0].act_wait % 3))
 			{
-				if (Random(0, 9) < 8)
-					SetNpChar(48, gBoss[0].x, gBoss[0].y - (16 * 0x200), Random(-0x100, 0x100), -0x333, 0, NULL, 0x100);
-				else
-					SetNpChar(48, gBoss[0].x, gBoss[0].y - (16 * 0x200), Random(-0x100, 0x100), -0x333, 2, NULL, 0x100);
-
+				// Spawn sand projectiles (NPC 48) with random horizontal velocity
+				int xm = Random(-256, 256);
+				int dir = (Random(0, 9) >= 8) ? 2 : 0;
+				SetNpChar(48, gBoss[0].x, gBoss[0].y - (16 * 0x200), xm, -0x333, dir, NULL, 0x100);
 				PlaySoundObject(39, SOUND_MODE_PLAY);
 			}
 
+			// [MOD] Transition if specific bullet is active (Bullet ID 6 = Polar Star Lvl 2/3)
 			if (gBoss[0].act_wait == 200 || CountArmsBullet(6))
 			{
 				gBoss[0].count1 = 0;
 				gBoss[0].act_no = 70;
 				PlaySoundObject(102, SOUND_MODE_PLAY);
 			}
-
 			break;
 
-		case 70: // Close mouth
-			++gBoss[0].count1;
-
-			if (gBoss[0].count1 > 2)
+		case 70: // Closing mouth
+			if (++gBoss[0].count1 > 2)
 			{
 				gBoss[0].count1 = 0;
 				--gBoss[0].count2;
 			}
 
 			if (gBoss[0].count2 == 1)
-				gBoss[0].damage = 20;
+				gBoss[5].damage = 40; // [MOD] Increased contact damage: 20 -> 40
 
 			if (gBoss[0].count2 == 0)
 			{
@@ -297,64 +293,48 @@ void ActBossChar_Omega(void)
 
 				gBoss[0].act_no = 80;
 				gBoss[0].act_wait = 0;
-
 				gBoss[0].bits &= ~NPC_SHOOTABLE;
-
 				gBoss[0].hit.front = 24 * 0x200;
 				gBoss[0].hit.back = 24 * 0x200;
 				gBoss[5].hit.top = 36 * 0x200;
-
-				gBoss[0].damage = 0;
+				gBoss[5].damage = 0;
 			}
-
 			break;
 
 		case 80:
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait == 48)
+			if (++gBoss[0].act_wait == 48)
 			{
 				gBoss[0].act_wait = 0;
 				gBoss[0].act_no = 90;
 			}
-
 			break;
 
-		case 90: // Go back into the ground
+		case 90: // Retreat into ground
 			SetQuake(2);
 			gBoss[0].y += 1 * 0x200;
 
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait % 4 == 0)
-				PlaySoundObject(26, SOUND_MODE_PLAY);
-
-			if (gBoss[0].act_wait == 48)
+			if (++gBoss[0].act_wait == 48)
 			{
 				gBoss[0].act_wait = 0;
 				gBoss[0].act_no = 100;
 			}
 
+			if (gBoss[0].act_wait % 4 == 0)
+				PlaySoundObject(26, SOUND_MODE_PLAY);
 			break;
 
-		case 100: // Move to proper position for coming out of the ground
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait == 120)
+		case 100: // Move to new random position underground
+			if (++gBoss[0].act_wait == 120)
 			{
 				gBoss[0].act_wait = 0;
 				gBoss[0].act_no = 30;
-
 				gBoss[0].x = gBoss[0].tgt_x + (Random(-64, 64) * 0x200);
 				gBoss[0].y = gBoss[0].tgt_y;
 			}
-
 			break;
 
-		case 110:
-			++gBoss[0].count1;
-
-			if (gBoss[0].count1 > 2)
+		case 110: // Jumping phase initialization
+			if (++gBoss[0].count1 > 2)
 			{
 				gBoss[0].count1 = 0;
 				++gBoss[0].count2;
@@ -367,13 +347,10 @@ void ActBossChar_Omega(void)
 				gBoss[0].hit.front = 16 * 0x200;
 				gBoss[0].hit.back = 16 * 0x200;
 			}
-
 			break;
 
-		case 120:
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait == 50 || CountArmsBullet(6))
+		case 120: // Shooting while jumping
+			if (++gBoss[0].act_wait == 50 || CountArmsBullet(6))
 			{
 				gBoss[0].act_no = 130;
 				PlaySoundObject(102, SOUND_MODE_PLAY);
@@ -383,88 +360,74 @@ void ActBossChar_Omega(void)
 
 			if (gBoss[0].act_wait < 30 && gBoss[0].act_wait % 5 == 0)
 			{
-				SetNpChar(48, gBoss[0].x, gBoss[0].y - (16 * 0x200), Random(-341, 341), -0x333, 0, NULL, 0x100);
+				SetNpChar(48, gBoss[0].x, gBoss[0].y - (16 * 0x200), Random(-341, 341), -0x333, 2, NULL, 0x100);
 				PlaySoundObject(39, SOUND_MODE_PLAY);
 			}
-
 			break;
 
-		case 130:
-			++gBoss[0].count1;
-
-			if (gBoss[0].count1 > 2)
+		case 130: // Preparing the pounce
+			if (++gBoss[0].count1 > 2)
 			{
 				gBoss[0].count1 = 0;
 				--gBoss[0].count2;
 			}
 
 			if (gBoss[0].count2 == 1)
-				gBoss[0].damage = 20;
+				gBoss[5].damage = 20;
 
 			if (gBoss[0].count2 == 0)
 			{
 				gBoss[0].act_no = 140;
 				gBoss[0].bits |= NPC_SHOOTABLE;
-
 				gBoss[0].hit.front = 16 * 0x200;
 				gBoss[0].hit.back = 16 * 0x200;
-
-				gBoss[0].ym = -0x5FF;
+				gBoss[0].ym = -1535;
 
 				PlaySoundObject(102, SOUND_MODE_STOP);
 				PlaySoundObject(12, SOUND_MODE_PLAY);
 				PlaySoundObject(25, SOUND_MODE_PLAY);
 
-				if (gBoss[0].x < gMC.x)
-					gBoss[0].xm = 0x100;
-				if (gBoss[0].x > gMC.x)
-					gBoss[0].xm = -0x100;
+				if (gBoss[0].x < gMC.x) gBoss[0].xm = 256;
+				else gBoss[0].xm = -256;
 
-				gBoss[0].damage = 0;
+				gBoss[5].damage = 0;
 				gBoss[5].hit.top = 36 * 0x200;
 			}
-
 			break;
 
-		case 140:
+		case 140: // Falling pounce
 			if (gMC.flag & 8 && gBoss[0].ym > 0)
 				gBoss[5].damage = 20;
 			else
 				gBoss[5].damage = 0;
 
-			gBoss[0].ym += 0x24;
-			if (gBoss[0].ym > 0x5FF)
-				gBoss[0].ym = 0x5FF;
+			gBoss[0].ym += 36; // Gravity
+			if (gBoss[0].ym > 1535)
+				gBoss[0].ym = 1535;
 
 			gBoss[0].x += gBoss[0].xm;
 			gBoss[0].y += gBoss[0].ym;
 
-			if (gBoss[0].flag & 8)
+			if (gBoss[0].flag & 8) // Hit ground
 			{
 				gBoss[0].act_no = 110;
 				gBoss[0].act_wait = 0;
 				gBoss[0].count1 = 0;
-
 				gBoss[5].hit.top = 16 * 0x200;
 				gBoss[5].damage = 0;
 
 				PlaySoundObject(26, SOUND_MODE_PLAY);
 				PlaySoundObject(12, SOUND_MODE_PLAY);
-
 				SetQuake(30);
 			}
-
 			break;
 
-		case 150:
+		case 150: // Death Sequence Start
 			SetQuake(2);
-
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait % 12 == 0)
+			if (!(++gBoss[0].act_wait % 12))
 				PlaySoundObject(52, SOUND_MODE_PLAY);
 
-			SetDestroyNpChar(gBoss[0].x + (Random(-0x30, 0x30) * 0x200), gBoss[0].y + (Random(-0x30, 0x18) * 0x200), 1, 1);
+			SetDestroyNpChar(gBoss[0].x + (Random(-48, 48) << 9), gBoss[0].y + (Random(-48, 24) << 9), 1, 1);
 
 			if (gBoss[0].act_wait > 100)
 			{
@@ -473,51 +436,38 @@ void ActBossChar_Omega(void)
 				SetFlash(gBoss[0].x, gBoss[0].y, 1);
 				PlaySoundObject(35, SOUND_MODE_PLAY);
 			}
-
 			break;
 
-		case 160:
+		case 160: // Final Explosion
 			SetQuake(40);
-
-			++gBoss[0].act_wait;
-
-			if (gBoss[0].act_wait > 50)
+			if (++gBoss[0].act_wait > 50)
 			{
-				gBoss[0].cond = 0;
-				gBoss[1].cond = 0;
-				gBoss[2].cond = 0;
-				gBoss[3].cond = 0;
-				gBoss[4].cond = 0;
-				gBoss[5].cond = 0;
+				for (i = 0; i < 6; i++) gBoss[i].cond = 0;
 			}
-
 			break;
 	}
 
-	RECT rect[4] = {
-		{0, 0, 80, 56},
-		{80, 0, 160, 56},
-		{160, 0, 240, 56},
-		{80, 0, 160, 56},
+	// Dynamic sprite selection based on 'count2' (Mouth open state)
+	static const RECT rect[4] = {
+		{0, 0, 80, 56}, {80, 0, 160, 56}, {160, 0, 240, 56}, {80, 0, 160, 56}
 	};
-
 	gBoss[0].rect = rect[gBoss[0].count2];
 
-	gBoss[1].shock = gBoss[0].shock;
-	gBoss[2].shock = gBoss[0].shock;
-	gBoss[3].shock = gBoss[0].shock;
-	gBoss[4].shock = gBoss[0].shock;
+	// Synchronize flashing effect across parts
+	for (i = 1; i <= 4; i++) gBoss[i].shock = gBoss[0].shock;
 
+	// Execute part behaviors
 	ActBoss01_34();
 	ActBoss01_12();
 	ActBoss01_5();
 
+	// Check for death trigger
 	if (gBoss[0].life == 0 && gBoss[0].act_no < 150)
 	{
 		gBoss[0].act_no = 150;
 		gBoss[0].act_wait = 0;
 		gBoss[0].damage = 0;
 		gBoss[5].damage = 0;
-		DeleteNpCharCode(48, TRUE);
+		DeleteNpCharCode(48, TRUE); // Clear active sand projectiles
 	}
 }
