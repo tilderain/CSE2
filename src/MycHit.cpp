@@ -797,38 +797,22 @@ void HandleModdedNPCPickups(int hit, int i)
 		SetCaret(gMC.x, gMC.y, CARET_QUESTION_MARK, DIR_LEFT);
 }
 #include "ArmsItem.h"
-void AddCustomWeaponAmmo(int amount, int weapon_code)
+void AddCustomWeaponAmmo(int amount, int ammo_amount)
 {
 	int i;
-	
-	// Try to find the weapon in the player's inventory
-	for (i = 0; i < 8; i++)
-	{
-		if (gArmsData[i].code == weapon_code)
-			break;
-	}
+	for (i = 0; i < 8; ++i)
+		if (gArmsData[i].code == 4) break;
 
-	// If not found, try to fallback to the Super Missile (ID 10)
 	if (i == 8)
 	{
-		for (i = 0; i < 8; i++)
-		{
-			if (gArmsData[i].code == 10)
-				break;
-		}
-
-		if (i == 8)
-			return; // Neither weapon is in the inventory
+		for (i = 0; i < 8; ++i)
+			if (gArmsData[i].code == 10) break;
+		if (i == 8) return;
 	}
 
-	// Add the ammo
-	gArmsData[i].max_num += amount;
-
-	// Clamp current ammo so it doesn't exceed the new max
-	if (gArmsData[i].num < gArmsData[i].max_num)
-	{
-		gArmsData[i].max_num = gArmsData[i].num; // Note: In the decomp, this sets max to current. It's likely a bug in the mod, meant to be 'num = max_num'.
-	}
+	gArmsData[i].num += ammo_amount;
+	if (gArmsData[i].max_num < gArmsData[i].num)
+		gArmsData[i].num = gArmsData[i].max_num; // FIXED: I previously wrote this line backwards!
 }
 void HitMyCharNpChar(void)
 {

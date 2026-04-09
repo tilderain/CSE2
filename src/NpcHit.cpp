@@ -508,7 +508,7 @@ bool SpawnSpecificAmmoDrop(int x, int y, int amount)
 	drop->code_char = 76; // Missile/Ammo pickup NPC type
 	drop->x = x;
 	drop->y = y;
-	drop->code_event = target_weapon;
+	//drop->code_event = target_weapon;
 	drop->exp = amount;
 	
 	// Copy base parameters from the NPC table
