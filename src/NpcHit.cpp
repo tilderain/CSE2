@@ -753,7 +753,7 @@ void HitNpCharBullet(void)
 					// Transition special projectiles to frame 15 (poof/dust ani_no)
 					else if (bul->code_bullet == 19 || bul->code_bullet == 23 || bul->code_bullet == 26)
 					{
-						bul->ani_no = 15;
+						bul->flag = 15;
 					}
 					else
 					{
