@@ -29,3 +29,4 @@ void RenderBackend_DrawGlyph(RenderBackend_Glyph *glyph, long x, long y);
 void RenderBackend_FlushGlyphs(void);
 void RenderBackend_HandleRenderTargetLoss(void);
 void RenderBackend_HandleWindowResize(unsigned int width, unsigned int height);
+void RenderBackend_ClearLightmap(unsigned char ambient_r, unsigned char ambient_g, unsigned char ambient_b);

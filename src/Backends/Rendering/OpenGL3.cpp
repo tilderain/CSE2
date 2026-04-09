@@ -2,6 +2,10 @@
 
 #include "../Rendering.h"
 
+#include <string>
+#include "../../Main.h" // Adjust the ../ count depending on where your OpenGL3.cpp is
+#include "../../File.h" // Needs to point to the root File.h for LoadFileToMemory
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,8 +33,11 @@ typedef enum RenderMode
 	MODE_DRAW_SURFACE,
 	MODE_DRAW_SURFACE_WITH_TRANSPARENCY,
 	MODE_COLOUR_FILL,
-	MODE_DRAW_GLYPH
+// Add to RenderMode enum
+	MODE_DRAW_GLYPH,
+	MODE_DRAW_LIGHT // <--- ADD THIS
 } RenderMode;
+
 
 typedef struct RenderBackend_Surface
 {
@@ -95,6 +102,18 @@ static spritebatch_t glyph_batcher;
 
 static int actual_screen_width;
 static int actual_screen_height;
+
+
+// Add to the global variable block
+static GLuint program_light;
+static GLuint program_composite;
+
+static GLint program_light_uniform_colour;
+static GLint program_composite_uniform_tex;
+static GLint program_composite_uniform_lightmap;
+
+static GLuint lightmap_fbo_id;
+static GLuint lightmap_texture_id;
 
 #ifdef USE_OPENGLES2
 static const GLchar *vertex_shader_plain = " \
@@ -222,7 +241,12 @@ static void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GL
 // Shader compilation //
 ////////////////////////
 
-static GLuint CompileShader(const char *vertex_shader_source, const char *fragment_shader_source)
+////////////////////////
+// Shader compilation //
+////////////////////////
+
+static GLuint CompileShader(const char *vert_filename, const GLchar *vertex_shader_source, GLint vert_len, 
+                            const char *frag_filename, const GLchar *fragment_shader_source, GLint frag_len)
 {
 	GLint shader_status;
 
@@ -230,15 +254,17 @@ static GLuint CompileShader(const char *vertex_shader_source, const char *fragme
 
 	// Compile vertex shader
 	GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL);
+	glShaderSource(vertex_shader, 1, &vertex_shader_source, &vert_len);
 	glCompileShader(vertex_shader);
 
 	glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &shader_status);
 	if (shader_status != GL_TRUE)
 	{
-		char buffer[0x200];
+		char buffer[1024];
 		glGetShaderInfoLog(vertex_shader, sizeof(buffer), NULL, buffer);
-		Backend_ShowMessageBox("Vertex shader error", buffer);
+		
+		std::string error_title = std::string("Vertex Shader Error: ") + vert_filename;
+		Backend_ShowMessageBox(error_title.c_str(), buffer); // 'buffer' contains the exact syntax error/line number
 		return 0;
 	}
 
@@ -246,15 +272,17 @@ static GLuint CompileShader(const char *vertex_shader_source, const char *fragme
 
 	// Compile fragment shader
 	GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragment_shader, 1, &fragment_shader_source, NULL);
+	glShaderSource(fragment_shader, 1, &fragment_shader_source, &frag_len);
 	glCompileShader(fragment_shader);
 
 	glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &shader_status);
 	if (shader_status != GL_TRUE)
 	{
-		char buffer[0x400];
+		char buffer[1024];
 		glGetShaderInfoLog(fragment_shader, sizeof(buffer), NULL, buffer);
-		Backend_ShowMessageBox("Fragment shader error", buffer);
+		
+		std::string error_title = std::string("Fragment Shader Error: ") + frag_filename;
+		Backend_ShowMessageBox(error_title.c_str(), buffer); // 'buffer' contains the exact syntax error/line number
 		return 0;
 	}
 
@@ -269,14 +297,58 @@ static GLuint CompileShader(const char *vertex_shader_source, const char *fragme
 	glGetProgramiv(program_id, GL_LINK_STATUS, &shader_status);
 	if (shader_status != GL_TRUE)
 	{
-		char buffer[0x400];
+		char buffer[1024];
 		glGetProgramInfoLog(program_id, sizeof(buffer), NULL, buffer);
-		Backend_ShowMessageBox("Shader linker error", buffer);
+		
+		std::string error_title = std::string("Shader Linker Error: ") + vert_filename + " & " + frag_filename;
+		Backend_ShowMessageBox(error_title.c_str(), buffer);
 		return 0;
 	}
 
+	// Shaders are linked into the program, so we can delete the individual shader objects
+	glDeleteShader(vertex_shader);
+	glDeleteShader(fragment_shader);
+
 	return program_id;
 }
+
+static GLuint CompileShaderFromFile(const char *vert_filename, const char *frag_filename)
+{
+	std::string vert_path = gDataPath + "/Shaders/" + vert_filename;
+	std::string frag_path = gDataPath + "/Shaders/" + frag_filename;
+
+	size_t vert_size = 0, frag_size = 0;
+	unsigned char *vert_data = LoadFileToMemory(vert_path.c_str(), &vert_size);
+	unsigned char *frag_data = LoadFileToMemory(frag_path.c_str(), &frag_size);
+
+	if (!vert_data || !frag_data)
+	{
+		std::string error_message = "Failed to load the following shader file(s) from data/Shaders/:\n";
+		
+		if (!vert_data) 
+			error_message += std::string("- ") + vert_filename + "\n";
+		if (!frag_data) 
+			error_message += std::string("- ") + frag_filename + "\n";
+
+		if (vert_data) free(vert_data);
+		if (frag_data) free(frag_data);
+		
+		Backend_ShowMessageBox("Shader Load Error", error_message.c_str());
+		return 0;
+	}
+
+	// Pass the filenames down so the compiler function can print them if it fails
+	GLuint program_id = CompileShader(
+		vert_filename, (const GLchar*)vert_data, (GLint)vert_size, 
+		frag_filename, (const GLchar*)frag_data, (GLint)frag_size
+	);
+
+	free(vert_data);
+	free(frag_data);
+
+	return program_id;
+}
+
 
 //////////////////////////////
 // Vertex buffer management //
@@ -548,6 +620,7 @@ static void PostGLCallCallback(const char *name, void *function_pointer, int len
 // Render-backend initialisation //
 ///////////////////////////////////
 
+
 RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_width, int screen_height, bool fullscreen, bool *vsync)
 {
 #ifndef USE_OPENGLES2
@@ -586,16 +659,21 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 		// Set up the vertex attributes
 		glEnableVertexAttribArray(ATTRIBUTE_INPUT_VERTEX_COORDINATES);
 
-		// Set up our shaders
-		program_texture = CompileShader(vertex_shader_texture, fragment_shader_texture);
-		program_colour_fill = CompileShader(vertex_shader_plain, fragment_shader_colour_fill);
-		program_glyph = CompileShader(vertex_shader_texture, fragment_shader_glyph);
+		// Set up our shaders from files
+		program_texture     = CompileShaderFromFile("texture.vert", "texture.frag");
+		program_colour_fill = CompileShaderFromFile("plain.vert",   "colour_fill.frag");
+		program_glyph       = CompileShaderFromFile("texture.vert", "glyph.frag");
+		program_light       = CompileShaderFromFile("texture.vert", "light.frag");
+		program_composite   = CompileShaderFromFile("texture.vert", "composite.frag");
 
-		if (program_texture != 0 && program_colour_fill != 0 && program_glyph != 0)
+		if (program_texture != 0 && program_colour_fill != 0 && program_glyph != 0 && program_light != 0 && program_composite != 0)
 		{
 			// Get shader uniforms
 			program_colour_fill_uniform_colour = glGetUniformLocation(program_colour_fill, "colour");
-			program_glyph_uniform_colour = glGetUniformLocation(program_glyph, "colour");
+			program_glyph_uniform_colour       = glGetUniformLocation(program_glyph, "colour");
+			program_light_uniform_colour       = glGetUniformLocation(program_light, "colour");
+			program_composite_uniform_tex      = glGetUniformLocation(program_composite, "tex");
+			program_composite_uniform_lightmap = glGetUniformLocation(program_composite, "lightmap");
 
 			// Set up framebuffer (used for surface-to-surface blitting)
 			glGenFramebuffers(1, &framebuffer_id);
@@ -621,6 +699,32 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 			framebuffer.height = screen_height;
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer.texture_id, 0);
+
+
+			// Set up Lightmap Framebuffer and Texture
+			glGenFramebuffers(1, &lightmap_fbo_id);
+			glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+
+			glGenTextures(1, &lightmap_texture_id);
+			glBindTexture(GL_TEXTURE_2D, lightmap_texture_id);
+		#ifdef USE_OPENGLES2
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screen_width, screen_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+		#else
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, screen_width, screen_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+		#endif
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		#ifndef USE_OPENGLES2
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+		#endif
+
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lightmap_texture_id, 0);
+
+
+			// Reset back to main framebuffer for regular drawing
+			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 			glViewport(0, 0, framebuffer.width, framebuffer.height);
 
 			// Set-up glyph-batcher
@@ -639,6 +743,13 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 			return &framebuffer;
 		}
 
+		// Cleanup on failure
+		if (program_composite != 0)
+			glDeleteProgram(program_composite);
+
+		if (program_light != 0)
+			glDeleteProgram(program_light);
+
 		if (program_glyph != 0)
 			glDeleteProgram(program_glyph);
 
@@ -655,6 +766,78 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 	}
 
 	return NULL;
+}
+
+
+void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, unsigned char green, unsigned char blue, unsigned char intensity)
+{	static unsigned char last_red;
+	static unsigned char last_green;
+	static unsigned char last_blue;
+	static unsigned char last_alpha; // Added for state tracking
+	if (last_render_mode != MODE_DRAW_LIGHT || last_red != red || last_green != green || last_blue != blue || last_alpha != intensity)
+	{
+		FlushVertexBuffer();
+
+		last_render_mode = MODE_DRAW_LIGHT;
+		last_source_texture = 0;
+		last_destination_texture = lightmap_texture_id;
+		last_red = red;
+		last_green = green;
+		last_blue = blue;
+		last_alpha = intensity;
+
+		// Point our framebuffer to the Lightmap
+		glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+		glViewport(0, 0, framebuffer.width, framebuffer.height);
+
+		glUseProgram(program_light);
+		
+		// Additive blending for lights
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE); 
+
+		glEnableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
+
+		glUniform4f(program_light_uniform_colour, red / 255.0f, green / 255.0f, blue / 255.0f, intensity / 255.0f);
+	}
+
+	// Add quad to vertex queue
+	const GLfloat vertex_left = ((x - radius) * (2.0f / framebuffer.width)) - 1.0f;
+	const GLfloat vertex_right = ((x + radius) * (2.0f / framebuffer.width)) - 1.0f;
+	const GLfloat vertex_top = ((y - radius) * (2.0f / framebuffer.height)) - 1.0f;
+	const GLfloat vertex_bottom = ((y + radius) * (2.0f / framebuffer.height)) - 1.0f;
+
+	VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+	if (vbs != NULL)
+	{
+		vbs->vertices[0][0].texture.x = 0.0f; vbs->vertices[0][0].texture.y = 0.0f;
+		vbs->vertices[0][1].texture.x = 1.0f; vbs->vertices[0][1].texture.y = 0.0f;
+		vbs->vertices[0][2].texture.x = 1.0f; vbs->vertices[0][2].texture.y = 1.0f;
+
+		vbs->vertices[1][0].texture.x = 0.0f; vbs->vertices[1][0].texture.y = 0.0f;
+		vbs->vertices[1][1].texture.x = 1.0f; vbs->vertices[1][1].texture.y = 1.0f;
+		vbs->vertices[1][2].texture.x = 0.0f; vbs->vertices[1][2].texture.y = 1.0f;
+
+		vbs->vertices[0][0].position.x = vertex_left; vbs->vertices[0][0].position.y = vertex_top;
+		vbs->vertices[0][1].position.x = vertex_right; vbs->vertices[0][1].position.y = vertex_top;
+		vbs->vertices[0][2].position.x = vertex_right; vbs->vertices[0][2].position.y = vertex_bottom;
+
+		vbs->vertices[1][0].position.x = vertex_left; vbs->vertices[1][0].position.y = vertex_top;
+		vbs->vertices[1][1].position.x = vertex_right; vbs->vertices[1][1].position.y = vertex_bottom;
+		vbs->vertices[1][2].position.x = vertex_left; vbs->vertices[1][2].position.y = vertex_bottom;
+	}
+}
+
+void RenderBackend_ClearLightmap(unsigned char ambient_r, unsigned char ambient_g, unsigned char ambient_b)
+{
+	FlushVertexBuffer();
+	last_render_mode = MODE_BLANK;
+	
+	glBindFramebuffer(GL_FRAMEBUFFER, lightmap_fbo_id);
+	glClearColor(ambient_r / 255.0f, ambient_g / 255.0f, ambient_b / 255.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 }
 
 void RenderBackend_Deinit(void)
@@ -685,12 +868,8 @@ void RenderBackend_DrawScreen(void)
 	last_source_texture = 0;
 	last_destination_texture = 0;
 
-	// This would be a good time to use a custom shader to divide the pixels by
-	// their alpha, to undo the premultiplied alpha stuff, but the framebuffer
-	// is pretty much guaranteed to be fully opaque, and X / 1 == X, so it'd be
-	// a waste of processing power.
-
-	glUseProgram(program_texture);
+	// Use composite shader to multiply the screen with the lightmap
+	glUseProgram(program_composite);
 
 	glDisable(GL_BLEND);
 
@@ -706,7 +885,7 @@ void RenderBackend_DrawScreen(void)
 	GLsizei width;
 	GLsizei height;
 
-	if (actual_screen_width * framebuffer.height > framebuffer.width * actual_screen_height)	// Fancy way to do `if (actual_screen_width / actual_screen_height > framebuffer.width / framebuffer.height)` without floats
+	if (actual_screen_width * framebuffer.height > framebuffer.width * actual_screen_height)	
 	{
 		y = 0;
 		height = actual_screen_height;
@@ -725,9 +904,18 @@ void RenderBackend_DrawScreen(void)
 
 	glViewport(x, y, width, height);
 
-	// Draw framebuffer to screen
+	// Bind the Main Framebuffer to GL_TEXTURE0
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, framebuffer.texture_id);
+	glUniform1i(program_composite_uniform_tex, 0);
 
+	// Bind the Lightmap to GL_TEXTURE1
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, lightmap_texture_id);
+	glUniform1i(program_composite_uniform_lightmap, 1);
+
+
+	// Setup full screen quad vertices
 	VertexBufferSlot *vertex_buffer_slot = GetVertexBufferSlot(1);
 
 	if (vertex_buffer_slot != NULL)
@@ -761,7 +949,11 @@ void RenderBackend_DrawScreen(void)
 		vertex_buffer_slot->vertices[1][2].position.y = 1.0f;
 	}
 
+	// Draw the composite to the screen
 	FlushVertexBuffer();
+
+	// IMPORTANT: Reset active texture back to 0, otherwise regular draws will break
+	glActiveTexture(GL_TEXTURE0);
 
 	WindowBackend_OpenGL_Display();
 
@@ -769,9 +961,10 @@ void RenderBackend_DrawScreen(void)
 	// the buffer should always be cleared, even if it seems unnecessary
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// Switch back to our framebuffer
+	// Switch back to our framebuffer for the next frame
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 }
+
 
 ////////////////////////
 // Surface management //

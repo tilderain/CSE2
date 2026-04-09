@@ -746,7 +746,7 @@ void HitNpCharNpChar()
 }
 
 #include "Fluid.h"
-
+#include "Backends/Rendering.h"
 static int ModeAction(void)
 {
 	int frame_x;
@@ -798,6 +798,7 @@ static int ModeAction(void)
 	{
 		// Get pressed keys
 		GetTrg();
+        RenderBackend_ClearLightmap(255, 255, 255); 
 
 		if (gKey & KEY_PAUSE)
 		{
