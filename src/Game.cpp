@@ -873,6 +873,7 @@ static int ModeAction(void)
 
 		ProcFade();
 		CortBox(&grcFull, color);
+		RenderBackend_ClearNormalMap(); // <--- 1. RESET NORMALS
 		RenderBackend_ClearLightmap(80, 80, 100); 
 		ClearOcclusionMap(); // <--- ADD THIS
 		RefreshOcclusionMap(frame_x, frame_y);

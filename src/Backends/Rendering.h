@@ -38,3 +38,4 @@ void RenderBackend_PrepareOcclusion(void);
 void RenderBackend_ClearOcclusion(void);
 void RenderBackend_DrawOccluder(const RenderBackend_Rect *rect);
 void RenderBackend_DrawTileOccluder(RenderBackend_Surface *source_surface, const RenderBackend_Rect *rect, long x, long y);
+void RenderBackend_ClearNormalMap(void);

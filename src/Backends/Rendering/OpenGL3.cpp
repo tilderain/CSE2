@@ -21,11 +21,16 @@
 
 #include "../Misc.h"
 #include "Window/OpenGL.h"
+#include <cmath>
 
 #define TOTAL_VBOS 8
 
 #define ATTRIBUTE_INPUT_VERTEX_COORDINATES 1
 #define ATTRIBUTE_INPUT_TEXTURE_COORDINATES 2
+
+static GLuint normal_fbo_id;
+static GLuint normal_texture_id;
+
 
 
 typedef enum RenderMode
@@ -44,11 +49,12 @@ typedef enum RenderMode
 typedef struct RenderBackend_Surface
 {
 	GLuint texture_id;
+	GLuint normal_tex_id; // <--- NEW: Stores the bumpmap
 	unsigned int width;
 	unsigned int height;
 	unsigned char *pixels;
 } RenderBackend_Surface;
-
+static RenderBackend_Surface normal_surface;
 typedef struct RenderBackend_Glyph
 {
 	unsigned char *pixels;
@@ -127,6 +133,7 @@ static GLuint program_occluder;
 static GLint program_occluder_uniform_tex;
 
 static GLint program_light_uniform_dir;
+static GLuint last_fbo = 0;
 
 #ifdef USE_OPENGLES2
 static const GLchar *vertex_shader_plain = " \
@@ -257,6 +264,49 @@ static void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GL
 ////////////////////////
 // Shader compilation //
 ////////////////////////
+static void FlushVertexBuffer(void)
+{
+	static unsigned long vertex_buffer_size[TOTAL_VBOS];
+	static unsigned int current_vertex_buffer = 0;
+
+	if (current_vertex_buffer_slot == 0)
+		return;
+
+	// Select new VBO
+	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_ids[current_vertex_buffer]);
+	glVertexAttribPointer(ATTRIBUTE_INPUT_VERTEX_COORDINATES, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, position));
+	glVertexAttribPointer(ATTRIBUTE_INPUT_TEXTURE_COORDINATES, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, texture));
+
+	// Upload vertex buffer to VBO, growing it if necessary
+	if (local_vertex_buffer_size > vertex_buffer_size[current_vertex_buffer])
+	{
+		vertex_buffer_size[current_vertex_buffer] = local_vertex_buffer_size;
+		glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size[current_vertex_buffer] * sizeof(VertexBufferSlot), local_vertex_buffer, GL_STREAM_DRAW);
+	}
+	else
+	{
+		glBufferSubData(GL_ARRAY_BUFFER, 0, current_vertex_buffer_slot * sizeof(VertexBufferSlot), local_vertex_buffer);
+	}
+
+	if (++current_vertex_buffer >= TOTAL_VBOS)
+		current_vertex_buffer = 0;
+
+	glDrawArrays(GL_TRIANGLES, 0, 6 * current_vertex_buffer_slot);
+
+	current_vertex_buffer_slot = 0;
+}
+static GLuint current_fbo = 0;
+
+static void BindFBO(GLuint fbo_id, GLsizei width, GLsizei height)
+{
+    if (current_fbo != fbo_id)
+    {
+        FlushVertexBuffer();
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo_id);
+        glViewport(0, 0, width, height);
+        current_fbo = fbo_id;
+    }
+}
 
 static GLuint occlusion_fbo_id;
 static GLuint occlusion_texture_id;
@@ -398,37 +448,7 @@ static VertexBufferSlot* GetVertexBufferSlot(unsigned int slots_needed)
 	return &local_vertex_buffer[current_vertex_buffer_slot - slots_needed];
 }
 
-static void FlushVertexBuffer(void)
-{
-	static unsigned long vertex_buffer_size[TOTAL_VBOS];
-	static unsigned int current_vertex_buffer = 0;
 
-	if (current_vertex_buffer_slot == 0)
-		return;
-
-	// Select new VBO
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_ids[current_vertex_buffer]);
-	glVertexAttribPointer(ATTRIBUTE_INPUT_VERTEX_COORDINATES, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, position));
-	glVertexAttribPointer(ATTRIBUTE_INPUT_TEXTURE_COORDINATES, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, texture));
-
-	// Upload vertex buffer to VBO, growing it if necessary
-	if (local_vertex_buffer_size > vertex_buffer_size[current_vertex_buffer])
-	{
-		vertex_buffer_size[current_vertex_buffer] = local_vertex_buffer_size;
-		glBufferData(GL_ARRAY_BUFFER, vertex_buffer_size[current_vertex_buffer] * sizeof(VertexBufferSlot), local_vertex_buffer, GL_STREAM_DRAW);
-	}
-	else
-	{
-		glBufferSubData(GL_ARRAY_BUFFER, 0, current_vertex_buffer_slot * sizeof(VertexBufferSlot), local_vertex_buffer);
-	}
-
-	if (++current_vertex_buffer >= TOTAL_VBOS)
-		current_vertex_buffer = 0;
-
-	glDrawArrays(GL_TRIANGLES, 0, 6 * current_vertex_buffer_slot);
-
-	current_vertex_buffer_slot = 0;
-}
 
 ////////////////////
 // Glyph-batching //
@@ -708,6 +728,7 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
     		// --- Permanently tell the light shader that occlusionMap is on Unit 2 ---
     		glUseProgram(program_light);
     		glUniform1i(glGetUniformLocation(program_light, "occlusionMap"), 2);
+			glUniform1i(glGetUniformLocation(program_light, "normalMap"), 3);  // ADD THIS
     		glUseProgram(0);
 			// Set up framebuffer (used for surface-to-surface blitting)
 			glGenFramebuffers(1, &framebuffer_id);
@@ -784,6 +805,57 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 			// Reset back to main framebuffer for regular drawing
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 			glViewport(0, 0, framebuffer.width, framebuffer.height);
+
+			
+// 1. Generate the FBO
+glGenFramebuffers(1, &normal_fbo_id);
+if (normal_fbo_id == 0) {
+    Backend_ShowMessageBox("Critical Error", "Failed to generate Normal FBO ID");
+}
+glBindFramebuffer(GL_FRAMEBUFFER, normal_fbo_id);
+
+// 2. Generate the Texture
+glGenTextures(1, &normal_texture_id);
+if (normal_texture_id == 0) {
+    Backend_ShowMessageBox("Critical Error", "Failed to generate Normal Texture ID");
+}
+glBindTexture(GL_TEXTURE_2D, normal_texture_id);
+
+// 3. Setup Texture Storage - WE USE GL_RGBA HERE (GL_RGB often causes 0x8CD7)
+glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, screen_width, screen_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+// 4. Attach
+glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, normal_texture_id, 0);
+
+// 5. Final Completeness Check
+GLenum final_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+if (final_status != GL_FRAMEBUFFER_COMPLETE) {
+    char panic[128];
+    sprintf(panic, "FBO still failing! Status: 0x%04X\nIDs: FBO=%u, Tex=%u", final_status, normal_fbo_id, normal_texture_id);
+    Backend_ShowMessageBox("FBO Final Failure", panic);
+}
+
+// 6. Sync the state tracker
+current_fbo = normal_fbo_id; 
+
+// Reset back to main
+glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+current_fbo = framebuffer_id;
+
+
+			glUseProgram(program_texture);
+			glUniform1i(glGetUniformLocation(program_texture, "tex"), 0);
+			glUseProgram(0);
+
+   			normal_surface.texture_id = normal_texture_id;
+   			normal_surface.width = screen_width;
+   			normal_surface.height = screen_height;
+
 
 			// Set-up glyph-batcher
 			spritebatch_config_t config;
@@ -871,6 +943,10 @@ void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, un
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, occlusion_texture_id);
     glUniform1i(glGetUniformLocation(program_light, "occlusionMap"), 2);
+
+
+	glActiveTexture(GL_TEXTURE3);                        // ADD
+	glBindTexture(GL_TEXTURE_2D, normal_texture_id);     // ADD
     glActiveTexture(GL_TEXTURE0);
 
 
@@ -938,6 +1014,7 @@ void RenderBackend_Deinit(void)
 
 void RenderBackend_DrawScreen(void)
 {
+
 	spritebatch_tick(&glyph_batcher);
 
 	FlushVertexBuffer();
@@ -992,6 +1069,12 @@ void RenderBackend_DrawScreen(void)
 	glUniform1i(program_composite_uniform_lightmap, 1);
 
 
+	glActiveTexture(GL_TEXTURE0);  // <-- ADD THIS
+
+
+// Set uniforms AFTER UseProgram and AFTER binding textures
+glUniform1i(program_composite_uniform_tex, 0);
+glUniform1i(program_composite_uniform_lightmap, 1);
 	// Setup full screen quad vertices
 	VertexBufferSlot *vertex_buffer_slot = GetVertexBufferSlot(1);
 
@@ -1027,22 +1110,18 @@ void RenderBackend_DrawScreen(void)
 	}
 
 	// Draw the composite to the screen
-	FlushVertexBuffer();
+    FlushVertexBuffer();
 
-	// IMPORTANT: Reset active texture back to 0, otherwise regular draws will break
-	glActiveTexture(GL_TEXTURE0);
+    // Reset back to our internal game FBO and internal viewport immediately!
+    BindFBO(framebuffer_id, framebuffer.width, framebuffer.height);
 
-	WindowBackend_OpenGL_Display();
+    last_render_mode = MODE_BLANK;
+    last_source_texture = 0;
+    last_destination_texture = framebuffer.texture_id;
 
-	// According to https://www.khronos.org/opengl/wiki/Common_Mistakes#Swap_Buffers
-	// the buffer should always be cleared, even if it seems unnecessary
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	// Switch back to our framebuffer for the next frame
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+    WindowBackend_OpenGL_Display();
+    glClear(GL_COLOR_BUFFER_BIT);
 }
-
-
 ////////////////////////
 // Surface management //
 ////////////////////////
@@ -1076,6 +1155,7 @@ RenderBackend_Surface* RenderBackend_CreateSurface(unsigned int width, unsigned 
 	surface->width = width;
 	surface->height = height;
 
+	surface->normal_tex_id = 0; // --- ADD THIS LINE ---
 	return surface;
 }
 
@@ -1116,35 +1196,91 @@ unsigned char* RenderBackend_LockSurface(RenderBackend_Surface *surface, unsigne
 	return surface->pixels;
 }
 
+static unsigned char* GenerateNormalMap(const unsigned char* src_pixels, int width, int height)
+{
+    unsigned char* normal_pixels = (unsigned char*)malloc(width * height * 4);
+    
+    // The 'step' defines how many pixels outwards the highlight extends.
+    // Set this to 4 or 5 for the effect you want.
+    const int step = 16; 
+
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            auto getAlpha = [&](int _x, int _y) {
+                if (_x < 0 || _x >= width || _y < 0 || _y >= height) return 0.0f;
+                return (float)src_pixels[(_y * width + _x) * 4 + 3] / 255.0f;
+            };
+
+            // WIDE SOBEL: We sample 'step' pixels away instead of 1.
+            // This creates a smooth gradient (slope) that spans the distance.
+            float tl = getAlpha(x - step, y - step); float t = getAlpha(x, y - step); float tr = getAlpha(x + step, y - step);
+            float l  = getAlpha(x - step, y);                                         float r  = getAlpha(x + step, y);
+            float bl = getAlpha(x - step, y + step); float b = getAlpha(x, y + step); float br = getAlpha(x + step, y + step);
+
+            float dx = (tr + 2.0f * r + br) - (tl + 2.0f * l + bl);
+            float dy = (bl + 2.0f * b + br) - (tl + 2.0f * t + tr);
+            
+            float nx = -dx;
+            float ny = -dy;
+            float nz = 0.2f; // Lower NZ makes the "extended" highlights much more visible
+
+            float length = sqrtf(nx * nx + ny * ny + nz * nz);
+            if (length > 0) { nx /= length; ny /= length; nz /= length; }
+
+            // --- THE TRICK TO EXTEND HIGHLIGHTS ---
+            // We need the normal map's alpha to be wider than the sprite.
+            // We take the "Max" alpha in a small radius to create a 'skirt'.
+            float extendedAlpha = 0.0f;
+            for(int iy = -step; iy <= step; iy+=step) {
+                for(int ix = -step; ix <= step; ix+=step) {
+                    extendedAlpha = fmaxf(extendedAlpha, getAlpha(x + ix, y + iy));
+                }
+            }
+
+            int idx = (y * width + x) * 4;
+            normal_pixels[idx + 0] = (unsigned char)((nx * 0.5f + 0.5f) * 255.0f);
+            normal_pixels[idx + 1] = (unsigned char)((ny * 0.5f + 0.5f) * 255.0f);
+            normal_pixels[idx + 2] = (unsigned char)((nz * 0.5f + 0.5f) * 255.0f);
+            normal_pixels[idx + 3] = (unsigned char)(extendedAlpha * 255.0f); // Use the wider alpha
+        }
+    }
+    return normal_pixels;
+}
 void RenderBackend_UnlockSurface(RenderBackend_Surface *surface, unsigned int width, unsigned int height)
 {
-	if (surface == NULL)
-		return;
+	if (surface == NULL) return;
+	FlushVertexBuffer();
 
-	// Flush the vertex buffer if we're about to modify its texture
-	if (surface->texture_id == last_source_texture || surface->texture_id == last_destination_texture)
-		FlushVertexBuffer();
+	// 1. Generate the Normal Map from the raw pixels
+	unsigned char* normal_pixels = GenerateNormalMap(surface->pixels, width, height);
 
-	// Pre-multiply the colour channels with the alpha, so blending works correctly
+	// 2. Pre-multiply alpha for the standard texture (your existing code)
 	unsigned char *pixels = surface->pixels;
-
-	for (unsigned int y = 0; y < height; ++y)
-	{
-		for (unsigned int x = 0; x < width; ++x)
-		{
-			pixels[0] = (pixels[0] * pixels[3]) / 0xFF;
-			pixels[1] = (pixels[1] * pixels[3]) / 0xFF;
-			pixels[2] = (pixels[2] * pixels[3]) / 0xFF;
-			pixels += 4;
-		}
+	for (unsigned int i = 0; i < width * height; ++i) {
+		pixels[i*4+0] = (pixels[i*4+0] * pixels[i*4+3]) / 255;
+		pixels[i*4+1] = (pixels[i*4+1] * pixels[i*4+3]) / 255;
+		pixels[i*4+2] = (pixels[i*4+2] * pixels[i*4+3]) / 255;
 	}
 
+	// 3. Upload Standard Texture
 	glBindTexture(GL_TEXTURE_2D, surface->texture_id);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
-	free(surface->pixels);
 
-	glBindTexture(GL_TEXTURE_2D, last_source_texture);
+	// 4. Create and Upload Normal Map Texture
+	if (surface->normal_tex_id == 0) glGenTextures(1, &surface->normal_tex_id);
+	glBindTexture(GL_TEXTURE_2D, surface->normal_tex_id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, normal_pixels);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	free(normal_pixels);
+	free(surface->pixels);
 }
+
 
 /////////////
 // Drawing //
@@ -1191,86 +1327,98 @@ void RenderBackend_Blit(RenderBackend_Surface *source_surface, const RenderBacke
 	if (source_surface == NULL || destination_surface == NULL)
 		return;
 
-	// IF FULLBRIGHT: Punch a hole in the lightmap first
-	if (fullbright)
-		PunchLightmapHole(x, y, rect->right - rect->left, rect->bottom - rect->top);
+	glActiveTexture(GL_TEXTURE0);
+	// SHARED DATA CALCULATION
+	// Calculate UVs and Vertices once to use for all passes
+	const GLfloat tex_l = (GLfloat)rect->left / (GLfloat)source_surface->width;
+	const GLfloat tex_r = (GLfloat)rect->right / (GLfloat)source_surface->width;
+	const GLfloat tex_t = (GLfloat)rect->top / (GLfloat)source_surface->height;
+	const GLfloat tex_b = (GLfloat)rect->bottom / (GLfloat)source_surface->height;
 
+	const float destW = (float)(rect->right - rect->left);
+	const float destH = (float)(rect->bottom - rect->top);
+
+	const GLfloat vert_l = (x * (2.0f / destination_surface->width)) - 1.0f;
+	const GLfloat vert_r = ((x + destW) * (2.0f / destination_surface->width)) - 1.0f;
+	
+	// Flip Y for FBO-space (Standard FBOs are bottom-up)
+	const GLfloat vert_t = ((float)y / (float)destination_surface->height) * 2.0f - 1.0f;
+	const GLfloat vert_b = (((float)y + destH) / (float)destination_surface->height) * 2.0f - 1.0f;
+
+// PASS 1: Write normal map
+
+if (source_surface->normal_tex_id != 0)
+{
+    FlushVertexBuffer();
+
+    BindFBO(normal_fbo_id, framebuffer.width, framebuffer.height); 
+
+    glUseProgram(program_texture);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
+    glBindTexture(GL_TEXTURE_2D, source_surface->normal_tex_id);
+
+    VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+    if (vbs) {
+        vbs->vertices[0][0].texture = {tex_l, tex_t}; vbs->vertices[0][0].position = {vert_l, vert_t};
+        vbs->vertices[0][1].texture = {tex_r, tex_t}; vbs->vertices[0][1].position = {vert_r, vert_t};
+        vbs->vertices[0][2].texture = {tex_r, tex_b}; vbs->vertices[0][2].position = {vert_r, vert_b};
+        vbs->vertices[1][0].texture = {tex_l, tex_t}; vbs->vertices[1][0].position = {vert_l, vert_t};
+        vbs->vertices[1][1].texture = {tex_r, tex_b}; vbs->vertices[1][1].position = {vert_r, vert_b};
+        vbs->vertices[1][2].texture = {tex_l, tex_b}; vbs->vertices[1][2].position = {vert_l, vert_b};
+    }
+    FlushVertexBuffer();
+
+    last_render_mode = MODE_BLANK;
+    last_source_texture = 0;
+    last_destination_texture = 0;
+    current_fbo = 0;
+    BindFBO(framebuffer_id, framebuffer.width, framebuffer.height);
+}
+	// PASS 2: Punch lightmap hole for fullbright sprites
+	if (fullbright && destination_surface->texture_id == framebuffer.texture_id)
+	{
+		PunchLightmapHole(x, y, (long)destW, (long)destH);
+	}
+
+	// PASS 3: Color rendering
 	const RenderMode render_mode = (alpha_blend ? MODE_DRAW_SURFACE_WITH_TRANSPARENCY : MODE_DRAW_SURFACE);
-	// Flush vertex data if a context-change is needed
-	if (last_render_mode != render_mode || last_source_texture != source_surface->texture_id || last_destination_texture != destination_surface->texture_id)
+
+	if (last_render_mode != render_mode || last_source_texture != source_surface->texture_id ||
+		last_destination_texture != destination_surface->texture_id || last_fbo != framebuffer_id)
 	{
 		FlushVertexBuffer();
 
 		last_render_mode = render_mode;
 		last_source_texture = source_surface->texture_id;
 		last_destination_texture = destination_surface->texture_id;
+		last_fbo = framebuffer_id;
 
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id); 
-		// Point our framebuffer to the destination texture
+		BindFBO(framebuffer_id, destination_surface->width, destination_surface->height);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, destination_surface->texture_id, 0);
-		glViewport(0, 0, destination_surface->width, destination_surface->height);
 
 		glUseProgram(program_texture);
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-        // Resets the blend mode to the engine's default (Pre-multiplied Alpha)
-	    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); 
+		if (alpha_blend) glEnable(GL_BLEND);
+		else glDisable(GL_BLEND);
 
-		if (alpha_blend)
-			glEnable(GL_BLEND);
-		else
-			glDisable(GL_BLEND);
-
-		// Enable texture coordinates, since this uses textures
 		glEnableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
-
 		glBindTexture(GL_TEXTURE_2D, source_surface->texture_id);
 	}
 
-	// Add data to the vertex queue
-	const GLfloat texture_left = (GLfloat)rect->left / (GLfloat)source_surface->width;
-	const GLfloat texture_right = (GLfloat)rect->right / (GLfloat)source_surface->width;
-	const GLfloat texture_top = (GLfloat)rect->top / (GLfloat)source_surface->height;
-	const GLfloat texture_bottom = (GLfloat)rect->bottom / (GLfloat)source_surface->height;
-
-	const GLfloat vertex_left = (x * (2.0f / destination_surface->width)) - 1.0f;
-	const GLfloat vertex_right = ((x + (rect->right - rect->left)) * (2.0f / destination_surface->width)) - 1.0f;
-	const GLfloat vertex_top = (y * (2.0f / destination_surface->height)) - 1.0f;
-	const GLfloat vertex_bottom = ((y + (rect->bottom - rect->top)) * (2.0f / destination_surface->height)) - 1.0f;
-
-	VertexBufferSlot *vertex_buffer_slot = GetVertexBufferSlot(1);
-
-	if (vertex_buffer_slot != NULL)
+	VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+	if (vbs != NULL)
 	{
-		vertex_buffer_slot->vertices[0][0].texture.x = texture_left;
-		vertex_buffer_slot->vertices[0][0].texture.y = texture_top;
-		vertex_buffer_slot->vertices[0][1].texture.x = texture_right;
-		vertex_buffer_slot->vertices[0][1].texture.y = texture_top;
-		vertex_buffer_slot->vertices[0][2].texture.x = texture_right;
-		vertex_buffer_slot->vertices[0][2].texture.y = texture_bottom;
-
-		vertex_buffer_slot->vertices[1][0].texture.x = texture_left;
-		vertex_buffer_slot->vertices[1][0].texture.y = texture_top;
-		vertex_buffer_slot->vertices[1][1].texture.x = texture_right;
-		vertex_buffer_slot->vertices[1][1].texture.y = texture_bottom;
-		vertex_buffer_slot->vertices[1][2].texture.x = texture_left;
-		vertex_buffer_slot->vertices[1][2].texture.y = texture_bottom;
-
-		vertex_buffer_slot->vertices[0][0].position.x = vertex_left;
-		vertex_buffer_slot->vertices[0][0].position.y = vertex_top;
-		vertex_buffer_slot->vertices[0][1].position.x = vertex_right;
-		vertex_buffer_slot->vertices[0][1].position.y = vertex_top;
-		vertex_buffer_slot->vertices[0][2].position.x = vertex_right;
-		vertex_buffer_slot->vertices[0][2].position.y = vertex_bottom;
-
-		vertex_buffer_slot->vertices[1][0].position.x = vertex_left;
-		vertex_buffer_slot->vertices[1][0].position.y = vertex_top;
-		vertex_buffer_slot->vertices[1][1].position.x = vertex_right;
-		vertex_buffer_slot->vertices[1][1].position.y = vertex_bottom;
-		vertex_buffer_slot->vertices[1][2].position.x = vertex_left;
-		vertex_buffer_slot->vertices[1][2].position.y = vertex_bottom;
+		vbs->vertices[0][0].texture = {tex_l, tex_t}; vbs->vertices[0][0].position = {vert_l, vert_t};
+		vbs->vertices[0][1].texture = {tex_r, tex_t}; vbs->vertices[0][1].position = {vert_r, vert_t};
+		vbs->vertices[0][2].texture = {tex_r, tex_b}; vbs->vertices[0][2].position = {vert_r, vert_b};
+		vbs->vertices[1][0].texture = {tex_l, tex_t}; vbs->vertices[1][0].position = {vert_l, vert_t};
+		vbs->vertices[1][1].texture = {tex_r, tex_b}; vbs->vertices[1][1].position = {vert_r, vert_b};
+		vbs->vertices[1][2].texture = {tex_l, tex_b}; vbs->vertices[1][2].position = {vert_l, vert_b};
 	}
 }
-
 void RenderBackend_ColourFill(RenderBackend_Surface *surface, const RenderBackend_Rect *rect, unsigned char red, unsigned char green, unsigned char blue, unsigned char alpha)
 {
 	static unsigned char last_red;
@@ -1503,15 +1651,10 @@ void RenderBackend_FinishOcclusion(void)
 void RenderBackend_ClearOcclusion(void)
 {
     FlushVertexBuffer();
-    last_render_mode = MODE_BLANK;
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, occlusion_fbo_id);
-    // Clear to BLACK (0.0 = Light passes through)
+    BindFBO(occlusion_fbo_id, framebuffer.width, framebuffer.height);
+
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    
-    // Return to main FBO immediately
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
 }
 
 // Draws a solid white box into the occlusion map
@@ -1530,6 +1673,8 @@ void RenderBackend_DrawTileOccluder(RenderBackend_Surface *source_surface, const
         FlushVertexBuffer();
         last_render_mode = MODE_DRAW_OCCLUDER;
         last_source_texture = source_surface->texture_id;
+
+        last_destination_texture = occlusion_texture_id; 
         glUseProgram(program_occluder);
         glEnable(GL_BLEND); 
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1569,4 +1714,23 @@ void RenderBackend_DrawTileOccluder(RenderBackend_Surface *source_surface, const
         vbs->vertices[1][1].position.x = vertex_right; vbs->vertices[1][1].position.y = vertex_bottom;
         vbs->vertices[1][2].position.x = vertex_left;  vbs->vertices[1][2].position.y = vertex_bottom;
     }
+}
+
+void RenderBackend_ClearNormalMap(void)
+{
+    FlushVertexBuffer();
+    glBindFramebuffer(GL_FRAMEBUFFER, normal_fbo_id);
+    glViewport(0, 0, framebuffer.width, framebuffer.height);
+    
+    // Force write permissions
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); 
+    
+    glClearColor(0.5f, 0.5f, 1.0f, 1.0f); // Pale Blue
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Sync the state tracker so the next BindFBO actually works
+    current_fbo = normal_fbo_id; 
+    
+    // Switch back
+    BindFBO(framebuffer_id, framebuffer.width, framebuffer.height);
 }

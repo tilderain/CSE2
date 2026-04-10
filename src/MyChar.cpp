@@ -210,7 +210,7 @@ void PutMyChar(int fx, int fy)
 
 	float flicker = (float)Random(200, 202); 
 
-    DrawLight(gMC.x, gMC.y, fx, fy, flicker, 255, 200, 150, 128);
+    DrawLight(gMC.x, gMC.y, fx, fy, flicker, 255, 200, 150, 44);
 
 	// Standard conditions: Don't draw if Quote is inactive or hidden
 	if (!(gMC.cond & 0x80) || gMC.cond & 2)
