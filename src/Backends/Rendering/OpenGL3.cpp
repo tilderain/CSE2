@@ -27,6 +27,7 @@
 #define ATTRIBUTE_INPUT_VERTEX_COORDINATES 1
 #define ATTRIBUTE_INPUT_TEXTURE_COORDINATES 2
 
+
 typedef enum RenderMode
 {
 	MODE_BLANK,
@@ -35,7 +36,8 @@ typedef enum RenderMode
 	MODE_COLOUR_FILL,
 // Add to RenderMode enum
 	MODE_DRAW_GLYPH,
-	MODE_DRAW_LIGHT // <--- ADD THIS
+	MODE_DRAW_LIGHT, // <--- ADD THIS
+	MODE_DRAW_OCCLUDER
 } RenderMode;
 
 
@@ -114,6 +116,17 @@ static GLint program_composite_uniform_lightmap;
 
 static GLuint lightmap_fbo_id;
 static GLuint lightmap_texture_id;
+
+// Add a global to find the uniform
+static GLint program_light_uniform_pos;
+static GLint program_light_uniform_radius;
+static GLint program_light_uniform_tex_size;
+static RenderBackend_Surface occlusion_surface; // Add this
+
+static GLuint program_occluder;
+static GLint program_occluder_uniform_tex;
+
+static GLint program_light_uniform_dir;
 
 #ifdef USE_OPENGLES2
 static const GLchar *vertex_shader_plain = " \
@@ -244,6 +257,9 @@ static void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GL
 ////////////////////////
 // Shader compilation //
 ////////////////////////
+
+static GLuint occlusion_fbo_id;
+static GLuint occlusion_texture_id;
 
 static GLuint CompileShader(const char *vert_filename, const GLchar *vertex_shader_source, GLint vert_len, 
                             const char *frag_filename, const GLchar *fragment_shader_source, GLint frag_len)
@@ -669,6 +685,9 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 		program_light       = CompileShaderFromFile("texture.vert", "light.frag");
 		program_composite   = CompileShaderFromFile("texture.vert", "composite.frag");
 
+		program_occluder = CompileShaderFromFile("texture.vert", "occluder.frag");
+		program_occluder_uniform_tex = glGetUniformLocation(program_occluder, "tex");
+
 		if (program_texture != 0 && program_colour_fill != 0 && program_glyph != 0 && program_light != 0 && program_composite != 0)
 		{
 			// Get shader uniforms
@@ -678,6 +697,18 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 			program_composite_uniform_tex      = glGetUniformLocation(program_composite, "tex");
 			program_composite_uniform_lightmap = glGetUniformLocation(program_composite, "lightmap");
 
+
+			program_light_uniform_pos          = glGetUniformLocation(program_light, "lightPos");
+			program_light_uniform_radius       = glGetUniformLocation(program_light, "lightRadius");
+    		// --- ADD THIS LINE ---
+    		program_light_uniform_tex_size     = glGetUniformLocation(program_light, "texSize");
+			program_light_uniform_dir = glGetUniformLocation(program_light, "lightDir");
+
+
+    		// --- Permanently tell the light shader that occlusionMap is on Unit 2 ---
+    		glUseProgram(program_light);
+    		glUniform1i(glGetUniformLocation(program_light, "occlusionMap"), 2);
+    		glUseProgram(0);
 			// Set up framebuffer (used for surface-to-surface blitting)
 			glGenFramebuffers(1, &framebuffer_id);
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
@@ -725,6 +756,30 @@ RenderBackend_Surface* RenderBackend_Init(const char *window_title, int screen_w
 
 			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lightmap_texture_id, 0);
 
+
+			glGenFramebuffers(1, &occlusion_fbo_id);
+		    glBindFramebuffer(GL_FRAMEBUFFER, occlusion_fbo_id);
+
+		    glGenTextures(1, &occlusion_texture_id);
+		    glBindTexture(GL_TEXTURE_2D, occlusion_texture_id);
+
+		    // Set up the surface struct
+		    occlusion_surface.texture_id = occlusion_texture_id;
+		    occlusion_surface.width = screen_width;
+		    occlusion_surface.height = screen_height;
+
+		#ifdef USE_OPENGLES2
+		    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, screen_width, screen_height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
+		#else
+		    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, screen_width, screen_height, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+		#endif
+		    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+		    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, occlusion_texture_id, 0);
 
 			// Reset back to main framebuffer for regular drawing
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
@@ -803,6 +858,22 @@ void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, un
 
 		glUniform4f(program_light_uniform_colour, red / 255.0f, green / 255.0f, blue / 255.0f, intensity / 255.0f);
 	}
+
+// Do not invert Y! FBOs naturally align gl_FragCoord.y with the game's top-down Y.
+    glUniform2f(program_light_uniform_pos, (float)x, (float)y);
+    
+    // lightRadius is a single float, so use glUniform1f
+    glUniform1f(program_light_uniform_radius, radius);
+
+    glUniform2f(program_light_uniform_tex_size, (float)framebuffer.width, (float)framebuffer.height);
+
+    // Bind the occlusion map to Texture Unit 2
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, occlusion_texture_id);
+    glUniform1i(glGetUniformLocation(program_light, "occlusionMap"), 2);
+    glActiveTexture(GL_TEXTURE0);
+
+
 
 	// Add quad to vertex queue
 	const GLfloat vertex_left = ((x - radius) * (2.0f / framebuffer.width)) - 1.0f;
@@ -1398,4 +1469,104 @@ void RenderBackend_DrawUnlitRect(long x, long y, long w, long h)
 
 	// Switch back to main framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+}
+
+
+void RenderBackend_PrepareOcclusion(void)
+{
+    // Important: Flush the vertex buffer before changing the target FBO
+    FlushVertexBuffer();
+    
+    last_destination_texture = occlusion_texture_id;
+    last_render_mode = MODE_BLANK;
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, occlusion_fbo_id);
+    glViewport(0, 0, occlusion_surface.width, occlusion_surface.height);
+
+    // Clear to BLACK (0.0 means "light passes through")
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void RenderBackend_FinishOcclusion(void)
+{
+    // Flush the occluder tiles to the texture before switching back
+    FlushVertexBuffer();
+    
+    last_destination_texture = framebuffer.texture_id;
+    last_render_mode = MODE_BLANK;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+    glViewport(0, 0, framebuffer.width, framebuffer.height);
+}
+
+void RenderBackend_ClearOcclusion(void)
+{
+    FlushVertexBuffer();
+    last_render_mode = MODE_BLANK;
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, occlusion_fbo_id);
+    // Clear to BLACK (0.0 = Light passes through)
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    // Return to main FBO immediately
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_id);
+}
+
+// Draws a solid white box into the occlusion map
+void RenderBackend_DrawOccluder(const RenderBackend_Rect *rect)
+{
+    // Use existing ColourFill logic but targeting the occlusion surface
+    RenderBackend_ColourFill(&occlusion_surface, rect, 255, 255, 255, 255);
+}
+
+void RenderBackend_DrawTileOccluder(RenderBackend_Surface *source_surface, const RenderBackend_Rect *rect, long x, long y)
+{
+    if (source_surface == NULL) return;
+
+    if (last_render_mode != MODE_DRAW_OCCLUDER || last_source_texture != source_surface->texture_id)
+    {
+        FlushVertexBuffer();
+        last_render_mode = MODE_DRAW_OCCLUDER;
+        last_source_texture = source_surface->texture_id;
+        glUseProgram(program_occluder);
+        glEnable(GL_BLEND); 
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glEnableVertexAttribArray(ATTRIBUTE_INPUT_TEXTURE_COORDINATES);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, source_surface->texture_id);
+        glUniform1i(program_occluder_uniform_tex, 0);
+    }
+
+    const GLfloat texture_left   = (GLfloat)rect->left / (GLfloat)source_surface->width;
+    const GLfloat texture_right  = (GLfloat)rect->right / (GLfloat)source_surface->width;
+    const GLfloat texture_top    = (GLfloat)rect->top / (GLfloat)source_surface->height;
+    const GLfloat texture_bottom = (GLfloat)rect->bottom / (GLfloat)source_surface->height;
+
+    // FIX: Match the engine's Y-coordinate mapping (Y=0 is bottom)
+    const GLfloat vertex_left    = (x * (2.0f / occlusion_surface.width)) - 1.0f;
+    const GLfloat vertex_right   = ((x + (rect->right - rect->left)) * (2.0f / occlusion_surface.width)) - 1.0f;
+    const GLfloat vertex_top     = (y * (2.0f / occlusion_surface.height)) - 1.0f;
+    const GLfloat vertex_bottom  = ((y + (rect->bottom - rect->top)) * (2.0f / occlusion_surface.height)) - 1.0f;
+
+    VertexBufferSlot *vbs = GetVertexBufferSlot(1);
+    if (vbs != NULL)
+    {
+        vbs->vertices[0][0].texture.x = texture_left;  vbs->vertices[0][0].texture.y = texture_top;
+        vbs->vertices[0][1].texture.x = texture_right; vbs->vertices[0][1].texture.y = texture_top;
+        vbs->vertices[0][2].texture.x = texture_right; vbs->vertices[0][2].texture.y = texture_bottom;
+
+        vbs->vertices[1][0].texture.x = texture_left;  vbs->vertices[1][0].texture.y = texture_top;
+        vbs->vertices[1][1].texture.x = texture_right; vbs->vertices[1][1].texture.y = texture_bottom;
+        vbs->vertices[1][2].texture.x = texture_left;  vbs->vertices[1][2].texture.y = texture_bottom;
+
+        vbs->vertices[0][0].position.x = vertex_left;  vbs->vertices[0][0].position.y = vertex_top;
+        vbs->vertices[0][1].position.x = vertex_right; vbs->vertices[0][1].position.y = vertex_top;
+        vbs->vertices[0][2].position.x = vertex_right; vbs->vertices[0][2].position.y = vertex_bottom;
+
+        vbs->vertices[1][0].position.x = vertex_left;  vbs->vertices[1][0].position.y = vertex_top;
+        vbs->vertices[1][1].position.x = vertex_right; vbs->vertices[1][1].position.y = vertex_bottom;
+        vbs->vertices[1][2].position.x = vertex_left;  vbs->vertices[1][2].position.y = vertex_bottom;
+    }
 }

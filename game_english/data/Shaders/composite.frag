@@ -7,5 +7,7 @@ void main()
 {
 	vec4 scene = texture(tex, texture_coordinates);
 	vec4 light = texture(lightmap, texture_coordinates);
-	fragment = vec4(scene.rgb * light.rgb, scene.a);
+    
+	// Multiply by 2.0 to allow overbrightening
+	fragment = vec4(scene.rgb * light.rgb * 2.0, scene.a);
 }

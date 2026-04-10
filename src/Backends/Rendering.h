@@ -32,3 +32,9 @@ void RenderBackend_HandleWindowResize(unsigned int width, unsigned int height);
 void RenderBackend_ClearLightmap(unsigned char ambient_r, unsigned char ambient_g, unsigned char ambient_b);
 void RenderBackend_DrawLight(long x, long y, float radius, unsigned char red, unsigned char green, unsigned char blue, unsigned char intensity);
 void RenderBackend_DrawUnlitRect(long x, long y, long w, long h);
+
+void RenderBackend_FinishOcclusion(void);
+void RenderBackend_PrepareOcclusion(void);
+void RenderBackend_ClearOcclusion(void);
+void RenderBackend_DrawOccluder(const RenderBackend_Rect *rect);
+void RenderBackend_DrawTileOccluder(RenderBackend_Surface *source_surface, const RenderBackend_Rect *rect, long x, long y);

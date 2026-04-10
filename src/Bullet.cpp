@@ -550,9 +550,37 @@ void PutBullet(int fx, int fy)
 	{
 		if (gBul[i].cond & 0x80)
 		{
-			if (gBul[i].code_bullet == 7) // 7 is the Fireball
+			if (gBul[i].code_bullet == 4) //pole
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 10.0f, 200, 200, 255, 255);
+            }
+			else if (gBul[i].code_bullet == 5) 
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 20.0f, 200, 200, 255, 255);
+            }
+			else if (gBul[i].code_bullet == 6) 
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 30.0f, 200, 200, 255, 255);
+            }
+			else if (gBul[i].code_bullet == 7) // 7 is the Fireball
             {
                 DrawLight(gBul[i].x, gBul[i].y, fx, fy, 40.0f, 255, 100, 0, 128);
+            }
+			else if (gBul[i].code_bullet == 9) // 7 is the Fireball
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 40.0f, 255, 100, 0, 255);
+            }
+			else if (gBul[i].code_bullet == 16) //bom
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
+            }
+			else if (gBul[i].code_bullet == 17) 
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
+            }
+			else if (gBul[i].code_bullet == 18)
+            {
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
             }
 			switch (gBul[i].direct)
 			{

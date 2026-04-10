@@ -76,3 +76,6 @@ void CortBoxAlpha(const RECT *rect, unsigned long col, unsigned char alpha);
 void CortBoxAlpha_Subpixel(const RECT *rect, unsigned long col, unsigned char alpha);
 
 void DrawLight(int sub_x, int sub_y, int fx, int fy, float radius, unsigned char r, unsigned char g, unsigned char b, unsigned char intensity);
+void RefreshOcclusionMap(int fx, int fy);
+void DrawOccluder(int x, int y, int w, int h);
+void ClearOcclusionMap(void);

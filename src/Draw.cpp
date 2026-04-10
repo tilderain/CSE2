@@ -41,7 +41,7 @@ static unsigned int vsync_fps;
 
 static RenderBackend_Surface *framebuffer;	// TODO - Not the original variable name
 
-static RenderBackend_Surface *surf[SURFACE_ID_MAX];
+RenderBackend_Surface *surf[SURFACE_ID_MAX];
 
 static FontObject *font;	// TODO - Not the original variable name
 #include "Debug.h"
@@ -864,4 +864,32 @@ void DrawUnlitRegion(int x, int y, int w, int h)
 {
 	extern int mag;
 	RenderBackend_DrawUnlitRect(x * mag, y * mag, w * mag, h * mag);
+}
+#include "Map.h"
+void RefreshOcclusionMap(int fx, int fy) {
+    // 1. Switch to Occlusion FBO and clear to transparent
+    RenderBackend_PrepareOcclusion(); 
+
+    // 2. Draw ONLY solid tiles (no transparency, just white blocks)
+    // You can loop through the map tiles here and call a simplified blit
+    PutStage_Front(fx, fy, true); // Add a 'is_occlusion_pass' flag to your tile drawer
+    
+    RenderBackend_FinishOcclusion();
+}
+
+void ClearOcclusionMap(void)
+{
+    RenderBackend_ClearOcclusion();
+}
+
+void DrawOccluder(int x, int y, int w, int h)
+{
+    extern int mag;
+    RenderBackend_Rect rect;
+    rect.left = x * mag;
+    rect.top = y * mag;
+    rect.right = (x + w) * mag;
+    rect.bottom = (y + h) * mag;
+    
+    RenderBackend_DrawOccluder(&rect);
 }

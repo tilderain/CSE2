@@ -1,5 +1,7 @@
 {
     "files.associations": {
+		"*.nut": "c",
+		"*.td": "c",
 		"cmath": "cpp",
 		"hash_map": "cpp",
 		"hash_set": "cpp",
@@ -12,6 +14,7 @@
 		"list": "cpp",
 		"vector": "cpp",
 		"*.tcc": "cpp",
-		"fstream": "cpp"
+		"fstream": "cpp",
+		"system_error": "cpp"
 	}
 }

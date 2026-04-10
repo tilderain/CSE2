@@ -186,7 +186,11 @@ void PutStage_Back(int fx, int fy)
 	}
 }
 
-void PutStage_Front(int fx, int fy)
+#include "Backends/Rendering.h"
+
+extern RenderBackend_Surface *surf[SURFACE_ID_MAX];
+
+void PutStage_Front(int fx, int fy, bool occlusion_pass)
 {
 	// RECT rcSnack = {256, 48, 272, 64}; // [Mod] Removed because we no longer draw the breakable block star
 	int i, j;
@@ -218,7 +222,30 @@ void PutStage_Front(int fx, int fy)
 			rect.right = rect.left + 16;
 			rect.bottom = rect.top + 16;
 
-			PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_LEVEL_TILESET);
+
+			// Map.cpp -> PutStage_Front
+			if (occlusion_pass)
+			{
+			    // 1. Calculate screen position (this is already scaled by mag inside the functions)
+			    int screen_x = PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx);
+			    int screen_y = PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy);
+			
+			    // 2. Scale the source RECT by 'mag'
+			    // This ensures (rect.right - rect.left) matches the scaled screen pixels
+			    extern int mag; 
+			    RenderBackend_Rect rcOccl;
+			    rcOccl.left   = (long)rect.left * mag;
+			    rcOccl.top    = (long)rect.top * mag;
+			    rcOccl.right  = (long)rect.right * mag;
+			    rcOccl.bottom = (long)rect.bottom * mag;
+			
+			    // 3. Pass the scaled rect to the backend
+			    RenderBackend_DrawTileOccluder(surf[SURFACE_ID_LEVEL_TILESET], &rcOccl, screen_x, screen_y);
+			}
+    		else
+			{
+				PutBitmap3(&grcGame, PixelToScreenCoord((i * 16) - 8) - SubpixelToScreenCoord(fx), PixelToScreenCoord((j * 16) - 8) - SubpixelToScreenCoord(fy), &rect, SURFACE_ID_LEVEL_TILESET);
+			}
 
 			// [Mod] The original code checks for attribute 0x43 and draws a breakable star on top. 
 			// This has been removed in the modded ASM.

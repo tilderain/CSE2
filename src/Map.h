@@ -23,5 +23,5 @@ void DeleteMapParts(int x, int y);
 void ShiftMapParts(int x, int y);
 BOOL ChangeMapParts(int x, int y, unsigned char no);
 void PutStage_Back(int fx, int fy);
-void PutStage_Front(int fx, int fy);
+void PutStage_Front(int fx, int fy, bool occlusion_pass = false);
 void PutMapDataVector(int fx, int fy);
