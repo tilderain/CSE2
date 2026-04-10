@@ -1195,55 +1195,69 @@ unsigned char* RenderBackend_LockSurface(RenderBackend_Surface *surface, unsigne
 
 	return surface->pixels;
 }
-
 static unsigned char* GenerateNormalMap(const unsigned char* src_pixels, int width, int height)
 {
     unsigned char* normal_pixels = (unsigned char*)malloc(width * height * 4);
-    
-    // The 'step' defines how many pixels outwards the highlight extends.
-    // Set this to 4 or 5 for the effect you want.
-    const int step = 16; 
+
+    const int step = 1;
 
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
         {
-            auto getAlpha = [&](int _x, int _y) {
+            auto getHeight = [&](int _x, int _y) {
                 if (_x < 0 || _x >= width || _y < 0 || _y >= height) return 0.0f;
-                return (float)src_pixels[(_y * width + _x) * 4 + 3] / 255.0f;
+                int p = (_y * width + _x) * 4;
+                float r = (float)src_pixels[p + 0] / 255.0f;
+                float g = (float)src_pixels[p + 1] / 255.0f;
+                float b = (float)src_pixels[p + 2] / 255.0f;
+                float a = (float)src_pixels[p + 3] / 255.0f;
+                float luminance = (r * 0.2126f + g * 0.7152f + b * 0.0722f);
+                return luminance * a;
             };
 
-            // WIDE SOBEL: We sample 'step' pixels away instead of 1.
-            // This creates a smooth gradient (slope) that spans the distance.
-            float tl = getAlpha(x - step, y - step); float t = getAlpha(x, y - step); float tr = getAlpha(x + step, y - step);
-            float l  = getAlpha(x - step, y);                                         float r  = getAlpha(x + step, y);
-            float bl = getAlpha(x - step, y + step); float b = getAlpha(x, y + step); float br = getAlpha(x + step, y + step);
+            float tl = getHeight(x-step, y-step); float t = getHeight(x, y-step); float tr = getHeight(x+step, y-step);
+            float l  = getHeight(x-step, y);                                       float r  = getHeight(x+step, y);
+            float bl = getHeight(x-step, y+step); float b = getHeight(x, y+step); float br = getHeight(x+step, y+step);
 
             float dx = (tr + 2.0f * r + br) - (tl + 2.0f * l + bl);
             float dy = (bl + 2.0f * b + br) - (tl + 2.0f * t + tr);
-            
+
             float nx = -dx;
             float ny = -dy;
-            float nz = 0.2f; // Lower NZ makes the "extended" highlights much more visible
+            float nz = 0.1f;
 
-            float length = sqrtf(nx * nx + ny * ny + nz * nz);
-            if (length > 0) { nx /= length; ny /= length; nz /= length; }
+            float len = sqrtf(nx * nx + ny * ny + nz * nz);
+            if (len > 0) { nx /= len; ny /= len; nz /= len; }
 
-            // --- THE TRICK TO EXTEND HIGHLIGHTS ---
-            // We need the normal map's alpha to be wider than the sprite.
-            // We take the "Max" alpha in a small radius to create a 'skirt'.
-            float extendedAlpha = 0.0f;
-            for(int iy = -step; iy <= step; iy+=step) {
-                for(int ix = -step; ix <= step; ix+=step) {
-                    extendedAlpha = fmaxf(extendedAlpha, getAlpha(x + ix, y + iy));
-                }
-            }
+            // Extended height for alpha (surface detection)
+            float extendedHeight = 0.0f;
+            for (int iy = -step; iy <= step; iy += step)
+                for (int ix = -step; ix <= step; ix += step)
+                    extendedHeight = fmaxf(extendedHeight, getHeight(x + ix, y + iy));
+
+            // For pixels with no surface (dark/transparent background),
+            // blend toward a flat upward normal so diffuse lighting still works.
+            // flatBlend = 1.0 means pure background, 0.0 means pure surface.
+            float flatBlend = 1.0f - fminf(extendedHeight * 4.0f, 1.0f);
+
+            nx = nx * (1.0f - flatBlend);           // Pull X toward 0
+            ny = ny * (1.0f - flatBlend);           // Pull Y toward 0
+            nz = nz * (1.0f - flatBlend) + flatBlend; // Pull Z toward 1
+
+            // Re-normalize
+            len = sqrtf(nx * nx + ny * ny + nz * nz);
+            if (len > 0) { nx /= len; ny /= len; nz /= len; }
+
+            // Background gets a small floor height so the shader sees a surface.
+            // Without this, alpha=0 means the light ray finds nothing to illuminate.
+            float finalHeight = fmaxf(extendedHeight, 0.05f);
 
             int idx = (y * width + x) * 4;
             normal_pixels[idx + 0] = (unsigned char)((nx * 0.5f + 0.5f) * 255.0f);
             normal_pixels[idx + 1] = (unsigned char)((ny * 0.5f + 0.5f) * 255.0f);
             normal_pixels[idx + 2] = (unsigned char)((nz * 0.5f + 0.5f) * 255.0f);
-            normal_pixels[idx + 3] = (unsigned char)(extendedAlpha * 255.0f); // Use the wider alpha
+            normal_pixels[idx + 3] = (unsigned char)(finalHeight * 255.0f);
         }
     }
     return normal_pixels;

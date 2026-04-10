@@ -572,15 +572,15 @@ void PutBullet(int fx, int fy)
             }
 			else if (gBul[i].code_bullet == 16) //bom
             {
-                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 300.0f, 255, 100, 0, 255);
             }
 			else if (gBul[i].code_bullet == 17) 
             {
-                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 300.0f, 255, 100, 0, 255);
             }
 			else if (gBul[i].code_bullet == 18)
             {
-                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 100.0f, 255, 100, 0, 255);
+                DrawLight(gBul[i].x, gBul[i].y, fx, fy, 300.0f, 255, 100, 0, 255);
             }
 			switch (gBul[i].direct)
 			{

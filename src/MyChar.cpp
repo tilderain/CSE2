@@ -208,9 +208,9 @@ void PutMyChar(int fx, int fy)
 	extern int gGrappleLength;             // dword_493818
 
 
-	float flicker = (float)Random(200, 202); 
+	float flicker = (float)Random(100, 100); 
 
-    DrawLight(gMC.x, gMC.y, fx, fy, flicker, 255, 200, 150, 44);
+    DrawLight(gMC.x, gMC.y, fx, fy, flicker, 255, 200, 150, 128);
 
 	// Standard conditions: Don't draw if Quote is inactive or hidden
 	if (!(gMC.cond & 0x80) || gMC.cond & 2)

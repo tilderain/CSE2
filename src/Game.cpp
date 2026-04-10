@@ -874,12 +874,13 @@ static int ModeAction(void)
 		ProcFade();
 		CortBox(&grcFull, color);
 		RenderBackend_ClearNormalMap(); // <--- 1. RESET NORMALS
-		RenderBackend_ClearLightmap(80, 80, 100); 
+		RenderBackend_ClearLightmap(40, 40, 100); 
 		ClearOcclusionMap(); // <--- ADD THIS
 		RefreshOcclusionMap(frame_x, frame_y);
 
 		GetFramePosition(&frame_x, &frame_y);
-		PutBack(frame_x, frame_y);
+		//PutBack(frame_x, frame_y);
+				CortBox(&grcFull, color);
 		DoFireSpread(frame_x, frame_y);
 		PutStage_Back(frame_x, frame_y);
 		PutBossChar(frame_x, frame_y);
