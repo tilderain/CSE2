@@ -78,13 +78,16 @@ void main()
 
     float shadow = (1.0 - occAccum) * heightShadow;
 
-    // 4. Final Combine
-    // Ambient keeps surfaces from going pitch black when facing away
-    // Diffuse lights up surfaces facing toward the light
+// 4. Final Combine
     const float ambient = 0.05;
-    float lighting = ambient + (1.0 - ambient) * diff;
+    
+    // FIX 1: Multiply shadow ONLY by the diff component. 
+    // This allows the ambient floor to survive inside shadowed areas.
+    float lighting = ambient + (1.0 - ambient) * (diff * shadow);
 
-    float baseLighting = intensity * shadow * colour.a * lighting;
+    // The radial falloff (intensity) and the alpha still fade the overall light out at the edges
+    float baseLighting = intensity * colour.a * lighting;
+    
     // Multiply by 2.0 to allow overbright on lit faces
     vec3 litColour = colour.rgb * baseLighting * 2.0;
 
